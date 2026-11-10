@@ -88,3 +88,30 @@ def test_alternatives_single_scale_and_point():
     assert fm.alternatives({"interval": [3, 3.5], "units": ["bar", "Bar"]}) == [
         {"units": ["bar", "Bar"], "interval": [3.0, 3.5], "point": False}]
     assert fm.alternatives({"value": 80, "units": ["°C"]})[0]["point"] is True
+
+
+def test_zero_width_interval_is_point():
+    alts = fm.alternatives({"interval": [6000, 6000], "units": ["kPa"]})
+    assert alts[0]["point"] is True
+    assert fm.alternatives({"interval": [3, 3.5], "units": ["bar"]})[0]["point"] is False
+
+
+@pytest.mark.parametrize("kw", [
+    {"interval": [985, 985], "units": ["hPa"]},
+    {"interval": [1017, 1017], "units": ["hPa"]},
+    {"interval": [29.8, 30.0], "units": ["inHg"]},
+    {"interval": [755, 760], "units": ["mmHg"]},
+    {"interval": [[1010, 1012], [29.8, 29.9]], "units": [["mbar"], ["inHg"]]},
+])
+def test_barometer_detected(kw):
+    assert fm.is_barometer(fm.alternatives(kw))
+
+
+@pytest.mark.parametrize("kw", [
+    {"interval": [6000, 6000], "units": ["kPa"]},
+    {"interval": [850, 850], "units": ["bar"]},
+    {"interval": [3, 3.5], "units": ["bar"]},
+    {"interval": [120, 125], "units": ["mmHg"]},
+])
+def test_process_gauges_not_barometer(kw):
+    assert not fm.is_barometer(fm.alternatives(kw))

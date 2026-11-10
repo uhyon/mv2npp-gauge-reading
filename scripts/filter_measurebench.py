@@ -22,7 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from gauge_reader.units import flatten, unit_kind  # noqa: E402
+from gauge_reader.units import flatten, norm_unit, unit_kind  # noqa: E402
 
 # Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31, sphygmomanometer 21.
 # sphygmomanometer (aneroid, usually a metal-capsule mechanism; only the dial looks like a
@@ -90,7 +90,34 @@ def alternatives(kw: dict) -> list[dict]:
         pairs = zip(groups, ivs)
     else:
         pairs = ((groups[0] if groups else [], iv) for iv in ivs)
-    return [{"units": g, "interval": [lo, hi], "point": point} for g, (lo, hi) in pairs]
+    # A zero-width interval (lo == hi) is a single-value answer too.
+    return [{"units": g, "interval": [lo, hi], "point": point or lo == hi} for g, (lo, hi) in pairs]
+
+
+# Atmospheric-pressure band per barometer unit (normalized spelling -> (low, high)),
+# about 870-1085 hPa, the recorded extremes of sea-level pressure.
+BARO_BANDS = {
+    "hpa": (870, 1085), "hectopascal": (870, 1085), "mbar": (870, 1085), "millibar": (870, 1085),
+    "kpa": (87, 108.5), "kilopascal": (87, 108.5),
+    "inhg": (25.7, 32.1), "inchofmercury": (25.7, 32.1), "inchesofmercury": (25.7, 32.1),
+    "mmhg": (652, 814), "millimeterofmercury": (652, 814), "millimetersofmercury": (652, 814),
+    "millimetreofmercury": (652, 814), "millimetresofmercury": (652, 814), "torr": (652, 814),
+}
+
+
+def is_barometer(alts: list[dict]) -> bool:
+    """A pressure_gauge sample that reads atmospheric pressure (a barometer face).
+
+    True when some scale has an hPa/mbar/kPa/inHg/mmHg unit and its interval midpoint lies
+    in the atmospheric band. kPa alone is common on process gauges, so it needs the band too.
+    """
+    for a in alts:
+        mid = sum(a["interval"]) / 2
+        for u in a["units"]:
+            band = BARO_BANDS.get(norm_unit(u)) if isinstance(u, str) else None
+            if band and band[0] <= mid <= band[1]:
+                return True
+    return False
 
 
 def pick(kw: dict) -> tuple[str | None, tuple[float, float] | None, int, str]:
@@ -123,7 +150,8 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--out", default="data/processed/measurebench_dial")
     p.add_argument("--keep-type", action="append", default=[], help="extra image_type to keep")
-    p.add_argument("--exclude-type", action="append", default=[], help="image_type to drop")
+    p.add_argument("--exclude-type", action="append", default=[],
+                   help="type to drop; 'barometer' drops pressure_gauge samples flagged as barometers")
     p.add_argument("--report", action="store_true", help="print drop reasons and dropped units")
     a = p.parse_args()
 
@@ -139,6 +167,7 @@ def main() -> None:
     (out / "images").mkdir(parents=True, exist_ok=True)
     kept, reasons, dropped_units, multi = [], Counter(), Counter(), Counter()
     no_iv_eval, no_iv_examples, paired_examples = Counter(), [], []
+    zero_width, baro = [], []
     for r in dial:
         t = r["image_type"]
         if t not in keep_types:
@@ -159,22 +188,34 @@ def main() -> None:
             continue
         reasons[why] += 1
         alts = alternatives(kw)
+        subtype = "barometer" if t == "pressure_gauge" and is_barometer(alts) else t
+        if subtype == "barometer":
+            baro.append((r["question_id"], unit, iv))
+            if "barometer" in a.exclude_type:
+                reasons["excluded_barometer"] += 1
+                continue
+        if any(x["interval"][0] == x["interval"][1] for x in alts):
+            zero_width.append((r["question_id"], unit, iv))
         if why == "ok_paired" and len(paired_examples) < 10:
             paired_examples.append((r["question_id"], r["evaluator_kwargs"], unit, iv, alts))
         r["image"].save(out / "images" / f"{r['question_id']}.png")
-        kept.append({"question_id": r["question_id"], "image_type": t, "unit": unit,
+        kept.append({"question_id": r["question_id"], "image_type": t, "subtype": subtype, "unit": unit,
                      "interval_low": iv[0], "interval_high": iv[1], "n_intervals": n,
                      "alternatives": json.dumps(alts, ensure_ascii=False),
                      "source": (r.get("meta_info") or {}).get("source", ""),
                      "scale_min": "", "scale_max": ""})
 
-    fields = ["question_id", "image_type", "unit", "interval_low", "interval_high", "n_intervals",
+    fields = ["question_id", "image_type", "subtype", "unit", "interval_low", "interval_high", "n_intervals",
               "alternatives", "source", "scale_min", "scale_max"]
     with open(out / "labels.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(kept)
-    print(f"kept: {len(kept)}", Counter(k["image_type"] for k in kept).most_common())
+    print(f"kept: {len(kept)}", Counter(k["image_type"] for k in kept).most_common(),
+          "| by subtype:", Counter(k["subtype"] for k in kept).most_common())
+    print(f"barometer-like pressure_gauge samples: {len(baro)}"
+          + (" (excluded)" if "barometer" in a.exclude_type else " (kept, subtype=barometer)"))
+    print(f"zero-width intervals (lo == hi, scored with point_tol): {len(zero_width)}")
     print("samples with several intervals (type, outcome):", dict(multi) or "none")
     if a.report:
         print("outcome counts:", dict(reasons))
@@ -184,6 +225,9 @@ def main() -> None:
         print("ok_paired examples (raw kwargs -> primary pair; all alternatives):")
         for qid, kws, u, iv, alts in paired_examples:
             print(f"  {qid:22s} {kws}\n      -> ({u}, {iv});  alternatives={json.dumps(alts, ensure_ascii=False)}")
+        for name, rows in (("barometer", baro), ("zero-width", zero_width)):
+            for qid, u, iv in rows:
+                print(f"  {name:10s} {qid:22s} {u} {iv}")
         print("no_interval by (type, evaluator):", dict(no_iv_eval) or "none")
         for qid, ev, kws in no_iv_examples:
             print(f"  {qid:22s} {ev:22s} {kws}")
