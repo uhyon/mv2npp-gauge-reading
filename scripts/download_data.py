@@ -20,7 +20,9 @@ RAW = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 ROBOFLOW_PROJECTS = [
     # (workspace, project, version, export format)
-    ("hustlegrad", "analog-gauge-reading-v4tii", 7, "yolov8"),
+    # Universe page analog-gauge-reading-v4tii exports from this project (YOLOv8-pose, kpt_shape [2,3]).
+    ("hustlegrad", "gauge-detection-2-2ynzm", 7, "yolov8"),
+    # YOLOv8 segmentation polygons, train split only.
     ("analog-6kh04", "analog-gauge-obaw9", 1, "yolov8"),
 ]
 
@@ -47,7 +49,7 @@ def download_roboflow() -> None:
     for ws, proj, ver, fmt in ROBOFLOW_PROJECTS:
         out = RAW / "roboflow" / proj
         rf.workspace(ws).project(proj).version(ver).download(fmt, location=str(out))
-        print(f"[ok] Roboflow {ws}/{proj} v{ver} -> {out}. Record its license in docs/DATASETS.md.")
+        print(f"[ok] Roboflow {ws}/{proj} v{ver} -> {out}. License: CC BY 4.0 (attribution required).")
 
 
 def cambridge_instructions() -> None:
