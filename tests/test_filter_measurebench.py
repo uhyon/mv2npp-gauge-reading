@@ -63,3 +63,14 @@ def test_pick_reasons():
     assert fm.pick({"interval": [], "units": ["bar"]})[3] == "no_interval"
     kw = {"interval": [[1, 2], [3, 4], [5, 6]], "units": [["bar"], ["psi"]]}
     assert fm.pick(kw)[3] == "interval_unit_count_mismatch"
+
+
+def test_single_value_answers_become_point_intervals():
+    assert fm.intervals_of(3.5) == [(3.5, 3.5)]
+    assert fm.intervals_of("120") == [(120.0, 120.0)]
+    assert fm.pick({"value": 120, "units": ["mmHg"]}) == ("mmHg", (120.0, 120.0), 1, "ok")
+    assert fm.pick({"intervals": [[3, 3.5]], "units": ["bar"]}) == ("bar", (3.0, 3.5), 1, "ok")
+
+
+def test_default_types_include_sphygmomanometer():
+    assert {"pressure_gauge", "thermometer", "sphygmomanometer"} <= fm.KEEP_TYPES

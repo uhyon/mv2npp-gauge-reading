@@ -20,9 +20,10 @@ import re
 from collections import Counter
 from pathlib import Path
 
-# Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31.
-# sphygmomanometer (21, Bourdon-type, mmHg) is optional: --keep-type sphygmomanometer
-KEEP_TYPES = {"pressure_gauge", "thermometer"}
+# Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31, sphygmomanometer 21.
+# sphygmomanometer is a Bourdon-type pressure dial (mmHg), so it is kept by default.
+# Use --exclude-type sphygmomanometer for pressure_gauge + thermometer only.
+KEEP_TYPES = {"pressure_gauge", "thermometer", "sphygmomanometer"}
 
 # Normalized unit spellings (see norm_unit) -> quantity.
 UNIT_KIND = {
@@ -70,10 +71,20 @@ def unit_ok(units) -> bool:
     return any(unit_kind(u) for u in flatten(units))
 
 
+def _num(x) -> float | None:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
 def intervals_of(interval) -> list[tuple[float, float]]:
-    """[lo, hi] -> [(lo, hi)];  [[lo, hi], [lo2, hi2]] -> both."""
-    if not interval:
+    """[lo, hi] -> [(lo, hi)];  [[lo, hi], [lo2, hi2]] -> both;  a single number v -> [(v, v)]."""
+    if interval is None or interval == [] or interval == "":
         return []
+    if not isinstance(interval, (list, tuple)):
+        v = _num(interval)
+        return [] if v is None else [(v, v)]
     if isinstance(interval[0], (list, tuple)):
         return [iv for item in interval for iv in intervals_of(item)]
     return [(float(interval[0]), float(interval[-1]))]
@@ -82,6 +93,17 @@ def intervals_of(interval) -> list[tuple[float, float]]:
 def first_interval(interval) -> tuple[float, float] | None:
     ivs = intervals_of(interval)
     return ivs[0] if ivs else None
+
+
+ANSWER_KEYS = ("interval", "intervals", "value", "answer", "target", "reading", "range")
+
+
+def answer_field(kw: dict):
+    """The first answer-like field present: an interval, a list of intervals, or a single value."""
+    for k in ANSWER_KEYS:
+        if k in kw and kw[k] not in (None, "", []):
+            return kw[k]
+    return None
 
 
 def unit_groups(units) -> list[list[str]]:
@@ -99,7 +121,7 @@ def pick(kw: dict) -> tuple[str | None, tuple[float, float] | None, int, str]:
     is a pressure or temperature unit is used. Several intervals with one unit group
     are alternatives on the same scale (tolerance bands), and the first is used.
     """
-    ivs = intervals_of(kw.get("interval"))
+    ivs = intervals_of(answer_field(kw))
     groups = unit_groups(kw.get("units", []))
     if not ivs:
         return None, None, 0, "no_interval"
@@ -121,6 +143,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--out", default="data/processed/measurebench_dial")
     p.add_argument("--keep-type", action="append", default=[], help="extra image_type to keep")
+    p.add_argument("--exclude-type", action="append", default=[], help="image_type to drop")
     p.add_argument("--report", action="store_true", help="print drop reasons and dropped units")
     a = p.parse_args()
 
@@ -131,10 +154,11 @@ def main() -> None:
     print(f"real_world: {len(ds)}, dial: {len(dial)}")
     print("dial by image_type:", Counter(r["image_type"] for r in dial).most_common())
 
-    keep_types = KEEP_TYPES | set(a.keep_type)
+    keep_types = (KEEP_TYPES | set(a.keep_type)) - set(a.exclude_type)
     out = Path(a.out)
     (out / "images").mkdir(parents=True, exist_ok=True)
     kept, reasons, dropped_units, multi = [], Counter(), Counter(), Counter()
+    no_iv_eval, no_iv_examples = Counter(), []
     for r in dial:
         t = r["image_type"]
         if t not in keep_types:
@@ -148,6 +172,10 @@ def main() -> None:
             reasons[why] += 1
             if why == "unit":
                 dropped_units[(t, json.dumps(kw.get("units"), ensure_ascii=False))] += 1
+            if why == "no_interval":
+                no_iv_eval[(t, r["evaluator"])] += 1
+                if len(no_iv_examples) < 10:
+                    no_iv_examples.append((r["question_id"], r["evaluator"], r["evaluator_kwargs"]))
             continue
         reasons[why] += 1
         r["image"].save(out / "images" / f"{r['question_id']}.png")
@@ -169,6 +197,9 @@ def main() -> None:
         print("dropped for unit (type, raw units -> count):")
         for (t, u), c in dropped_units.most_common():
             print(f"  {t:18s} {u}  x{c}")
+        print("no_interval by (type, evaluator):", dict(no_iv_eval) or "none")
+        for qid, ev, kws in no_iv_examples:
+            print(f"  {qid:22s} {ev:22s} {kws}")
     print(f"-> {out}/labels.csv (CC BY-SA 4.0: keep attribution, share derived sets alike)")
 
 
