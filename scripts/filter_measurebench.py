@@ -22,7 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from gauge_reader.units import flatten, norm_unit, unit_kind  # noqa: E402
+from gauge_reader.units import convert, flatten, norm_unit, unit_kind  # noqa: E402
 
 # Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31, sphygmomanometer 21.
 # sphygmomanometer (aneroid, usually a metal-capsule mechanism; only the dial looks like a
@@ -91,7 +91,45 @@ def alternatives(kw: dict) -> list[dict]:
     else:
         pairs = ((groups[0] if groups else [], iv) for iv in ivs)
     # A zero-width interval (lo == hi) is a single-value answer too.
-    return [{"units": g, "interval": [lo, hi], "point": point or lo == hi} for g, (lo, hi) in pairs]
+    alts = [{"units": g, "interval": [lo, hi], "point": point or lo == hi, "tol": "interval"}
+            for g, (lo, hi) in pairs]
+    return widen_points_from_other_scale(alts)
+
+
+def widen_points_from_other_scale(alts: list[dict]) -> list[dict]:
+    """Give a point answer the tolerance the labeller used on another scale of the same dial.
+
+    For each point alternative, the first non-point alternative whose unit converts to the
+    point's unit is converted (e.g. 800-900 psi -> 5516-6205 kPa) and used as its interval,
+    with tol = "converted:<source unit>". A point with no such partner keeps tol = "point_tol"
+    and is widened by point_tol at evaluation time.
+    """
+    out = []
+    for a in alts:
+        if not a["point"]:
+            out.append(a)
+            continue
+        new = dict(a, tol="point_tol")
+        for b in alts:
+            if b is a or b["point"]:
+                continue
+            pair = next(((su, du) for du in a["units"] for su in b["units"]
+                         if isinstance(su, str) and isinstance(du, str)
+                         and convert(1.0, su, du) is not None), None)
+            if pair is None:
+                continue
+            su, du = pair
+            lo, hi = sorted(convert(v, su, du) for v in b["interval"])
+            new = dict(a, interval=[round(lo, 6), round(hi, 6)], point=False, tol=f"converted:{su}")
+            break
+        out.append(new)
+    return out
+
+
+def tol_method(alts: list[dict]) -> str:
+    """Per-sample summary for labels.csv: interval, converted, point_tol (or a + join)."""
+    kinds = sorted({a["tol"].split(":")[0] for a in alts})
+    return "+".join(kinds)
 
 
 # Atmospheric-pressure band per barometer unit (normalized spelling -> (low, high)),
@@ -194,19 +232,20 @@ def main() -> None:
             if "barometer" in a.exclude_type:
                 reasons["excluded_barometer"] += 1
                 continue
-        if any(x["interval"][0] == x["interval"][1] for x in alts):
-            zero_width.append((r["question_id"], unit, iv))
+        if any(x["tol"] != "interval" for x in alts):
+            zero_width.append((r["question_id"], unit, iv, tol_method(alts)))
         if why == "ok_paired" and len(paired_examples) < 10:
             paired_examples.append((r["question_id"], r["evaluator_kwargs"], unit, iv, alts))
         r["image"].save(out / "images" / f"{r['question_id']}.png")
         kept.append({"question_id": r["question_id"], "image_type": t, "subtype": subtype, "unit": unit,
                      "interval_low": iv[0], "interval_high": iv[1], "n_intervals": n,
+                     "tol_method": tol_method(alts),
                      "alternatives": json.dumps(alts, ensure_ascii=False),
                      "source": (r.get("meta_info") or {}).get("source", ""),
                      "scale_min": "", "scale_max": ""})
 
     fields = ["question_id", "image_type", "subtype", "unit", "interval_low", "interval_high", "n_intervals",
-              "alternatives", "source", "scale_min", "scale_max"]
+              "tol_method", "alternatives", "source", "scale_min", "scale_max"]
     with open(out / "labels.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -215,7 +254,8 @@ def main() -> None:
           "| by subtype:", Counter(k["subtype"] for k in kept).most_common())
     print(f"barometer-like pressure_gauge samples: {len(baro)}"
           + (" (excluded)" if "barometer" in a.exclude_type else " (kept, subtype=barometer)"))
-    print(f"zero-width intervals (lo == hi, scored with point_tol): {len(zero_width)}")
+    print(f"point answers (zero-width or single value): {len(zero_width)}",
+          dict(Counter(z[3] for z in zero_width)))
     print("samples with several intervals (type, outcome):", dict(multi) or "none")
     if a.report:
         print("outcome counts:", dict(reasons))
@@ -225,9 +265,10 @@ def main() -> None:
         print("ok_paired examples (raw kwargs -> primary pair; all alternatives):")
         for qid, kws, u, iv, alts in paired_examples:
             print(f"  {qid:22s} {kws}\n      -> ({u}, {iv});  alternatives={json.dumps(alts, ensure_ascii=False)}")
-        for name, rows in (("barometer", baro), ("zero-width", zero_width)):
-            for qid, u, iv in rows:
-                print(f"  {name:10s} {qid:22s} {u} {iv}")
+        for qid, u, iv in baro:
+            print(f"  barometer  {qid:22s} {u} {iv}")
+        for qid, u, iv, how in zero_width:
+            print(f"  point      {qid:22s} {u} {iv} -> {how}")
         print("no_interval by (type, evaluator):", dict(no_iv_eval) or "none")
         for qid, ev, kws in no_iv_examples:
             print(f"  {qid:22s} {ev:22s} {kws}")

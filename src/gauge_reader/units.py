@@ -48,3 +48,38 @@ def flatten(x) -> list:
 
 def same_unit(a: str, b: str) -> bool:
     return isinstance(a, str) and isinstance(b, str) and norm_unit(a) == norm_unit(b)
+
+
+# Pressure units -> pascals per unit (normalized spellings).
+PA_PER_UNIT = {
+    "pa": 1.0, "pascal": 1.0,
+    "hpa": 100.0, "hectopascal": 100.0, "mbar": 100.0, "millibar": 100.0,
+    "kpa": 1e3, "kilopascal": 1e3,
+    "mpa": 1e6, "megapascal": 1e6,
+    "bar": 1e5, "kbar": 1e8,
+    "psi": 6894.757293, "psig": 6894.757293, "psia": 6894.757293, "lbf/in2": 6894.757293,
+    "lb/in2": 6894.757293, "poundpersquareinch": 6894.757293, "poundspersquareinch": 6894.757293,
+    "kgf/cm2": 98066.5, "kg/cm2": 98066.5, "kgf/cm^2": 98066.5, "kg/cm^2": 98066.5,
+    "kilogram-forcepersquarecentimeter": 98066.5, "kilogramforcepersquarecentimeter": 98066.5,
+    "atm": 101325.0, "atmosphere": 101325.0,
+    "mmhg": 133.322387, "torr": 133.322368, "millimeterofmercury": 133.322387,
+    "millimetersofmercury": 133.322387, "millimetreofmercury": 133.322387,
+    "millimetresofmercury": 133.322387,
+    "inhg": 3386.389, "inchofmercury": 3386.389, "inchesofmercury": 3386.389,
+    "mmh2o": 9.80665, "mmaq": 9.80665, "mmwc": 9.80665, "cmh2o": 98.0665, "mh2o": 9806.65,
+    "inh2o": 249.08891, "inchesofwater": 249.08891,
+}
+
+_CELSIUS = {"°c", "℃", "degc", "c", "celsius", "degreecelsius"}
+_FAHRENHEIT = {"°f", "℉", "degf", "f", "fahrenheit", "degreefahrenheit"}
+
+
+def convert(value: float, src: str, dst: str) -> float | None:
+    """Convert value from unit src to unit dst; None if not convertible."""
+    a, b = norm_unit(src), norm_unit(dst)
+    if a in PA_PER_UNIT and b in PA_PER_UNIT:
+        return value * PA_PER_UNIT[a] / PA_PER_UNIT[b]
+    if a in _CELSIUS | _FAHRENHEIT and b in _CELSIUS | _FAHRENHEIT:
+        c = value if a in _CELSIUS else (value - 32.0) * 5.0 / 9.0
+        return c if b in _CELSIUS else c * 9.0 / 5.0 + 32.0
+    return None

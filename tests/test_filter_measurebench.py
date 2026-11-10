@@ -86,14 +86,35 @@ def test_alternatives_dual_scale_keeps_both():
 
 def test_alternatives_single_scale_and_point():
     assert fm.alternatives({"interval": [3, 3.5], "units": ["bar", "Bar"]}) == [
-        {"units": ["bar", "Bar"], "interval": [3.0, 3.5], "point": False}]
+        {"units": ["bar", "Bar"], "interval": [3.0, 3.5], "point": False, "tol": "interval"}]
     assert fm.alternatives({"value": 80, "units": ["°C"]})[0]["point"] is True
 
 
 def test_zero_width_interval_is_point():
     alts = fm.alternatives({"interval": [6000, 6000], "units": ["kPa"]})
-    assert alts[0]["point"] is True
-    assert fm.alternatives({"interval": [3, 3.5], "units": ["bar"]})[0]["point"] is False
+    assert alts[0]["point"] is True and alts[0]["tol"] == "point_tol"
+    assert fm.tol_method(alts) == "point_tol"
+    alts = fm.alternatives({"interval": [3, 3.5], "units": ["bar"]})
+    assert alts[0]["point"] is False and fm.tol_method(alts) == "interval"
+
+
+def test_point_widened_from_other_scale_psi_to_kpa():
+    alts = fm.alternatives({"interval": [[800, 900], [6000, 6000]], "units": [["psi"], ["kPa"]]})
+    kpa = alts[1]
+    assert kpa["point"] is False and kpa["tol"] == "converted:psi"
+    assert kpa["interval"] == pytest.approx([5515.81, 6205.28], abs=0.01)
+    assert fm.tol_method(alts) == "converted+interval"
+
+
+def test_point_widened_from_other_scale_mmhg_to_hpa():
+    alts = fm.alternatives({"interval": [[985, 985], [738, 739]], "units": [["hPa"], ["mmHg"]]})
+    assert alts[0]["interval"] == pytest.approx([983.92, 985.25], abs=0.01)
+    assert alts[0]["tol"] == "converted:mmHg"
+
+
+def test_point_without_convertible_partner_keeps_point_tol():
+    alts = fm.alternatives({"interval": [[850, 850], [10, 20]], "units": [["bar"], ["°C"]]})
+    assert alts[0]["tol"] == "point_tol" and alts[0]["point"] is True
 
 
 @pytest.mark.parametrize("kw", [
