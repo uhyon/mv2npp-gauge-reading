@@ -126,6 +126,47 @@ def widen_points_from_other_scale(alts: list[dict]) -> list[dict]:
     return out
 
 
+def sanity_flags(image_type: str, alts: list[dict]) -> list[str]:
+    """Cheap checks for likely mislabelled samples; reviewed by hand, never auto-dropped."""
+    flags = []
+    kinds = {unit_kind(u) for a in alts for u in a["units"]} - {None}
+    if image_type == "pressure_gauge" and kinds == {"temperature"}:
+        flags.append("temperature_unit_on_pressure_gauge")
+    if image_type == "thermometer" and kinds == {"pressure"}:
+        flags.append("pressure_unit_on_thermometer")
+    if image_type == "pressure_gauge":
+        for a in alts:
+            if any(isinstance(u, str) and norm_unit(u) in ("mmhg", "millimeterofmercury") for u in a["units"]):
+                mid = sum(a["interval"]) / 2
+                if 0 <= mid <= 320:
+                    flags.append("possible_sphygmomanometer")
+                    break
+    return flags
+
+
+MANUAL_FIELDS = ["question_id", "image_path", "unit", "reading", "scale_min", "scale_max", "minor_div", "notes"]
+
+
+def apply_manual(alts: list[dict], row: dict) -> tuple[list[dict], dict]:
+    """Replace point_tol scales with reading +/- 0.5 * minor_div from a filled manual-label row.
+
+    Returns the new alternatives and the full-scale range {scale_min, scale_max} for % FS.
+    Rows with an empty minor_div are left unchanged.
+    """
+    try:
+        d = float(row["minor_div"])
+        lo_s, hi_s = float(row["scale_min"]), float(row["scale_max"])
+    except (KeyError, TypeError, ValueError):
+        return alts, {}
+    out = []
+    for a in alts:
+        if a["tol"] == "point_tol":
+            v = a["interval"][0]
+            a = dict(a, interval=[v - d / 2, v + d / 2], point=False, tol="minor_div")
+        out.append(a)
+    return out, {"scale_min": lo_s, "scale_max": hi_s}
+
+
 def tol_method(alts: list[dict]) -> str:
     """Per-sample summary for labels.csv: interval, converted, point_tol (or a + join)."""
     kinds = sorted({a["tol"].split(":")[0] for a in alts})
@@ -191,6 +232,12 @@ def main() -> None:
     p.add_argument("--exclude-type", action="append", default=[],
                    help="type to drop; 'barometer' drops pressure_gauge samples flagged as barometers")
     p.add_argument("--report", action="store_true", help="print drop reasons and dropped units")
+    p.add_argument("--label-template", metavar="CSV",
+                   help="write a manual-label template for point_tol samples (range, minor division)")
+    p.add_argument("--manual-labels", metavar="CSV",
+                   help="filled template: point_tol scales become reading +/- 0.5 minor_div")
+    p.add_argument("--inspect", nargs="+", metavar="QID",
+                   help="print the raw record and save the image of these question_ids, then exit")
     a = p.parse_args()
 
     from datasets import load_dataset
@@ -199,6 +246,23 @@ def main() -> None:
     dial = [r for r in ds if r["design"] == "dial"]
     print(f"real_world: {len(ds)}, dial: {len(dial)}")
     print("dial by image_type:", Counter(r["image_type"] for r in dial).most_common())
+
+    if a.inspect:
+        out = Path(a.out) / "inspect"
+        out.mkdir(parents=True, exist_ok=True)
+        for r in ds:
+            if r["question_id"] in a.inspect:
+                r["image"].save(out / f"{r['question_id']}.png")
+                print(json.dumps({k: r[k] for k in ("question_id", "question", "image_type", "design",
+                                                    "evaluator", "evaluator_kwargs", "meta_info")},
+                                 ensure_ascii=False, indent=1, default=str))
+        print(f"images -> {out}")
+        return
+
+    manual = {}
+    if a.manual_labels:
+        with open(a.manual_labels, encoding="utf-8") as f:
+            manual = {row["question_id"]: row for row in csv.DictReader(f)}
 
     keep_types = (KEEP_TYPES | set(a.keep_type)) - set(a.exclude_type)
     out = Path(a.out)
@@ -226,6 +290,10 @@ def main() -> None:
             continue
         reasons[why] += 1
         alts = alternatives(kw)
+        scale = {}
+        if r["question_id"] in manual:
+            alts, scale = apply_manual(alts, manual[r["question_id"]])
+        flags = sanity_flags(t, alts)
         subtype = "barometer" if t == "pressure_gauge" and is_barometer(alts) else t
         if subtype == "barometer":
             baro.append((r["question_id"], unit, iv))
@@ -240,12 +308,13 @@ def main() -> None:
         kept.append({"question_id": r["question_id"], "image_type": t, "subtype": subtype, "unit": unit,
                      "interval_low": iv[0], "interval_high": iv[1], "n_intervals": n,
                      "tol_method": tol_method(alts),
+                     "flags": ";".join(flags),
                      "alternatives": json.dumps(alts, ensure_ascii=False),
                      "source": (r.get("meta_info") or {}).get("source", ""),
-                     "scale_min": "", "scale_max": ""})
+                     "scale_min": scale.get("scale_min", ""), "scale_max": scale.get("scale_max", "")})
 
     fields = ["question_id", "image_type", "subtype", "unit", "interval_low", "interval_high", "n_intervals",
-              "tol_method", "alternatives", "source", "scale_min", "scale_max"]
+              "tol_method", "flags", "alternatives", "source", "scale_min", "scale_max"]
     with open(out / "labels.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -272,6 +341,21 @@ def main() -> None:
         print("no_interval by (type, evaluator):", dict(no_iv_eval) or "none")
         for qid, ev, kws in no_iv_examples:
             print(f"  {qid:22s} {ev:22s} {kws}")
+    flagged = [k for k in kept if k["flags"]]
+    print(f"sanity flags (check by hand with --inspect): {len(flagged)}")
+    for k in flagged:
+        print(f"  {k['question_id']:22s} {k['unit']} [{k['interval_low']}, {k['interval_high']}] {k['flags']}")
+    if a.label_template:
+        todo = [k for k in kept if "point_tol" in k["tol_method"]]
+        with open(a.label_template, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=MANUAL_FIELDS)
+            w.writeheader()
+            for k in todo:
+                w.writerow({"question_id": k["question_id"],
+                            "image_path": str(out / "images" / f"{k['question_id']}.png"),
+                            "unit": k["unit"], "reading": k["interval_low"],
+                            "scale_min": "", "scale_max": "", "minor_div": "", "notes": ""})
+        print(f"label template for {len(todo)} point_tol samples -> {a.label_template}")
     print(f"-> {out}/labels.csv (CC BY-SA 4.0: keep attribution, share derived sets alike)")
 
 

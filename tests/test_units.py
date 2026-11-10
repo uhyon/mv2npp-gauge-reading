@@ -21,6 +21,16 @@ def test_conversion_factors(v, src, dst, expected):
     assert convert(v, src, dst) == pytest.approx(expected, rel=1e-4)
 
 
+@pytest.mark.parametrize("u", ["inches of water", "inch of water", "inH2O", "in H2O", "in. w.c.", '"H2O'])
+def test_inches_of_water_is_not_inhg(u):
+    from gauge_reader.units import norm_unit, unit_kind
+
+    assert unit_kind(u) == "pressure"
+    assert norm_unit(u) not in ("inhg", "inchofmercury", "inchesofmercury")
+    assert convert(1, u, "Pa") == pytest.approx(249.08891)
+    assert convert(1, u, "inHg") == pytest.approx(0.073556, rel=1e-4)
+
+
 def test_incompatible_units():
     assert convert(1, "bar", "°C") is None
     assert convert(1, "A", "V") is None

@@ -19,7 +19,9 @@ UNIT_KIND = {
     "millimetersofmercury": "pressure", "millimetreofmercury": "pressure",
     "inhg": "pressure", "inchofmercury": "pressure", "inchesofmercury": "pressure",
     "mmh2o": "pressure", "mmaq": "pressure", "mmwc": "pressure", "inh2o": "pressure",
-    "inchesofwater": "pressure", "cmh2o": "pressure", "mh2o": "pressure",
+    "inchesofwater": "pressure", "inchofwater": "pressure", "inwc": "pressure", "inwg": "pressure",
+    "inchesh2o": "pressure", "inchh2o": "pressure", "\"h2o": "pressure", "inchesofwatercolumn": "pressure",
+    "cmh2o": "pressure", "mh2o": "pressure",
     # temperature
     "°c": "temperature", "℃": "temperature", "degc": "temperature", "c": "temperature",
     "celsius": "temperature", "degreecelsius": "temperature", "degreescelsius": "temperature",
@@ -67,7 +69,9 @@ PA_PER_UNIT = {
     "millimetresofmercury": 133.322387,
     "inhg": 3386.389, "inchofmercury": 3386.389, "inchesofmercury": 3386.389,
     "mmh2o": 9.80665, "mmaq": 9.80665, "mmwc": 9.80665, "cmh2o": 98.0665, "mh2o": 9806.65,
-    "inh2o": 249.08891, "inchesofwater": 249.08891,
+    "inh2o": 249.08891, "inchesofwater": 249.08891, "inchofwater": 249.08891, "inwc": 249.08891,
+    "inwg": 249.08891, "inchesh2o": 249.08891, "inchh2o": 249.08891, "\"h2o": 249.08891,
+    "inchesofwatercolumn": 249.08891,
 }
 
 _CELSIUS = {"°c", "℃", "degc", "c", "celsius", "degreecelsius"}

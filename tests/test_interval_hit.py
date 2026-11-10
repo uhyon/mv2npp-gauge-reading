@@ -33,3 +33,11 @@ def test_json_string_and_hit_rate():
 
     s = json.dumps(DUAL)
     assert hit_rate([(3.05, "bar", s), (44.0, "bar", s)]) == 0.5
+
+
+def test_hit_rate_by_group_separates_point_tol():
+    from gauge_reader.eval.interval_hit import hit_rate_by_group
+
+    pt = [{"units": ["psi"], "interval": [2100.0, 2100.0], "point": True}]
+    rows = [("interval", 3.05, "bar", DUAL), ("interval", 9.0, "bar", DUAL), ("point_tol", 2100.0, "psi", pt)]
+    assert hit_rate_by_group(rows) == {"interval": (0.5, 2), "point_tol": (1.0, 1)}

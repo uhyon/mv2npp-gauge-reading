@@ -136,3 +136,21 @@ def test_barometer_detected(kw):
 ])
 def test_process_gauges_not_barometer(kw):
     assert not fm.is_barometer(fm.alternatives(kw))
+
+
+def test_sanity_flags():
+    alt = lambda u, lo, hi: fm.alternatives({"interval": [lo, hi], "units": [u]})
+    assert fm.sanity_flags("pressure_gauge", alt("°C", 60, 62)) == ["temperature_unit_on_pressure_gauge"]
+    assert fm.sanity_flags("pressure_gauge", alt("mmHg", 298, 298)) == ["possible_sphygmomanometer"]
+    assert fm.sanity_flags("pressure_gauge", alt("mmHg", 755, 760)) == []
+    assert fm.sanity_flags("pressure_gauge", alt("bar", 3, 3.5)) == []
+
+
+def test_apply_manual_minor_div():
+    alts = fm.alternatives({"interval": [2100, 2100], "units": ["psi"]})
+    assert alts[0]["tol"] == "point_tol"
+    new, scale = fm.apply_manual(alts, {"scale_min": "0", "scale_max": "5000", "minor_div": "100"})
+    assert new[0]["interval"] == [2050.0, 2150.0] and new[0]["tol"] == "minor_div"
+    assert scale == {"scale_min": 0.0, "scale_max": 5000.0}
+    same, scale = fm.apply_manual(alts, {"scale_min": "", "scale_max": "", "minor_div": ""})
+    assert same == alts and scale == {}

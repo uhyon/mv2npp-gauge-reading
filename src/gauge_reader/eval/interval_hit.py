@@ -47,3 +47,15 @@ def hit_rate(rows: Iterable[tuple[float, str | None, list[dict] | str]], point_t
     if not rows:
         return float("nan")
     return sum(interval_hit(v, u, alts, point_tol) for v, u, alts in rows) / len(rows)
+
+
+def hit_rate_by_group(rows: Iterable[tuple[str, float, str | None, list[dict] | str]],
+                      point_tol: float = 0.0) -> dict[str, tuple[float, int]]:
+    """Hit rate per group, e.g. per labels.csv tol_method, so point_tol samples are reported apart.
+
+    rows: (group, pred_value, pred_unit, alternatives). Returns {group: (rate, n)}.
+    """
+    groups: dict[str, list] = {}
+    for g, v, u, alts in rows:
+        groups.setdefault(g, []).append((v, u, alts))
+    return {g: (hit_rate(r, point_tol), len(r)) for g, r in sorted(groups.items())}
