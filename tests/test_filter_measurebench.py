@@ -160,3 +160,59 @@ def test_apply_manual_minor_div():
     assert scale == {"scale_min": 0.0, "scale_max": 5000.0}
     same, scale = fm.apply_manual(alts, {"scale_min": "", "scale_max": "", "minor_div": ""})
     assert same == alts and scale == {}
+
+
+def _row(qid, image_type, kw, design="dial"):
+    from PIL import Image
+
+    return {"question_id": qid, "question": "What is the reading?", "image": Image.new("RGB", (8, 8)),
+            "image_type": image_type, "design": design, "evaluator": "interval_matching",
+            "evaluator_kwargs": __import__("json").dumps(kw), "meta_info": {"source": "fake"}}
+
+
+def test_main_end_to_end_report(tmp_path, capsys):
+    """Runs main() to the end with --report and --label-template on fake rows (no download)."""
+    import csv
+
+    rows = [
+        _row("pressure_gauge_1", "pressure_gauge", {"interval": [[3, 3.1], [43, 45]], "units": [["bar"], ["psi"]]}),
+        _row("pressure_gauge_2", "pressure_gauge", {"interval": [[800, 900], [6000, 6000]],
+                                                    "units": [["psi"], ["kPa"]]}),
+        _row("pressure_gauge_3", "pressure_gauge", {"interval": [6000, 6000], "units": ["kPa"]}),
+        _row("pressure_gauge_4", "pressure_gauge", {"interval": [985, 990], "units": ["hPa"]}),
+        _row("pressure_gauge_5", "pressure_gauge", {"interval": [20, 22], "units": ["°C"]}),
+        _row("pressure_gauge_6", "pressure_gauge", {"interval": [20, 22], "units": ["°C"]}),
+        _row("thermometer_1", "thermometer", {"interval": [36, 37], "units": ["°C"]}),
+        _row("clock_1", "clock", {"interval": [3, 4], "units": ["h"]}),
+        _row("pressure_gauge_7", "pressure_gauge", {"interval": [3, 4], "units": ["bar"]}, design="digital"),
+    ]
+    tmpl = tmp_path / "template.csv"
+    fm.main(["--out", str(tmp_path), "--report", "--label-template", str(tmpl)], rows=rows)
+    out = capsys.readouterr().out
+
+    with open(tmp_path / "labels.csv", encoding="utf-8") as f:
+        labels = {r["question_id"]: r for r in csv.DictReader(f)}
+    assert set(labels) == {"pressure_gauge_1", "pressure_gauge_2", "pressure_gauge_3", "pressure_gauge_4",
+                           "pressure_gauge_5", "thermometer_1"}
+    assert labels["pressure_gauge_4"]["subtype"] == "barometer"
+    assert labels["pressure_gauge_2"]["tol_method"].startswith("converted")
+    assert "point_tol" in labels["pressure_gauge_3"]["tol_method"]
+    assert labels["pressure_gauge_5"]["flags"] == "temperature_unit_on_pressure_gauge"
+    assert (tmp_path / "images" / "thermometer_1.png").exists()
+
+    with open(tmpl, encoding="utf-8") as f:
+        todo = list(csv.DictReader(f))
+    assert [r["question_id"] for r in todo] == ["pressure_gauge_3"]
+
+    assert "kept: 6" in out
+    assert "temperature_unit_on_pressure_gauge: 1 ['pressure_gauge_5']" in out
+    assert "possible_sphygmomanometer: 0 []" in out
+    assert "barometer  pressure_gauge_4" in out
+    assert "label template for 1 point_tol samples" in out
+
+
+def test_main_exclude_barometer(tmp_path, capsys):
+    rows = [_row("pressure_gauge_4", "pressure_gauge", {"interval": [985, 990], "units": ["hPa"]}),
+            _row("pressure_gauge_1", "pressure_gauge", {"interval": [3, 4], "units": ["bar"]})]
+    fm.main(["--out", str(tmp_path), "--exclude-type", "barometer", "--report"], rows=rows)
+    assert "kept: 1" in capsys.readouterr().out

@@ -231,7 +231,8 @@ def pick(kw: dict) -> tuple[str | None, tuple[float, float] | None, int, str]:
     return u, ivs[0], len(ivs), "ok"
 
 
-def main() -> None:
+def main(argv: list[str] | None = None, rows=None) -> None:
+    """Filter MeasureBench real_world dials. `rows` (list of dicts) replaces the HF download in tests."""
     p = argparse.ArgumentParser()
     p.add_argument("--out", default="data/processed/measurebench_dial")
     p.add_argument("--keep-type", action="append", default=[], help="extra image_type to keep")
@@ -244,11 +245,14 @@ def main() -> None:
                    help="filled template: point_tol scales become reading +/- 0.5 minor_div")
     p.add_argument("--inspect", nargs="+", metavar="QID",
                    help="print the raw record and save the image of these question_ids, then exit")
-    a = p.parse_args()
+    a = p.parse_args(argv)
 
-    from datasets import load_dataset
+    if rows is None:
+        from datasets import load_dataset
 
-    ds = load_dataset("FlagEval/MeasureBench", split="real_world")
+        ds = load_dataset("FlagEval/MeasureBench", split="real_world")
+    else:
+        ds = rows
     dial = [r for r in ds if r["design"] == "dial"]
     print(f"real_world: {len(ds)}, dial: {len(dial)}")
     print("dial by image_type:", Counter(r["image_type"] for r in dial).most_common())
@@ -328,6 +332,20 @@ def main() -> None:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(kept)
+    # all files are written before any report output, so a report bug cannot lose them
+    if a.label_template:
+        todo = [k for k in kept if "point_tol" in k["tol_method"]]
+        with open(a.label_template, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=MANUAL_FIELDS)
+            w.writeheader()
+            for k in todo:
+                w.writerow({"question_id": k["question_id"],
+                            "image_path": str(out / "images" / f"{k['question_id']}.png"),
+                            "unit": k["unit"], "reading": k["interval_low"],
+                            "scale_min": "", "scale_max": "", "minor_div": "", "notes": ""})
+        print(f"label template for {len(todo)} point_tol samples -> {a.label_template}")
+    flagged = [k for k in kept if k["flags"]]
+    by_flag = Counter(f for k in flagged for f in k["flags"].split(";"))
     print(f"kept: {len(kept)}", Counter(k["image_type"] for k in kept).most_common(),
           "| by subtype:", Counter(k["subtype"] for k in kept).most_common())
     print(f"barometer-like pressure_gauge samples: {len(baro)}"
@@ -354,23 +372,10 @@ def main() -> None:
         print("no_interval by (type, evaluator):", dict(no_iv_eval) or "none")
         for qid, ev, kws in no_iv_examples:
             print(f"  {qid:22s} {ev:22s} {kws}")
-    flagged = [k for k in kept if k["flags"]]
-    by_flag = Counter(f for k in flagged for f in k["flags"].split(";"))
     print(f"manually excluded: {len(EXCLUDE_IDS)} ({', '.join(EXCLUDE_IDS)})")
     print(f"sanity flags (check by hand with --inspect): {len(flagged)}", dict(by_flag) or "")
     for k in flagged:
         print(f"  {k['question_id']:22s} {k['unit']} [{k['interval_low']}, {k['interval_high']}] {k['flags']}")
-    if a.label_template:
-        todo = [k for k in kept if "point_tol" in k["tol_method"]]
-        with open(a.label_template, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=MANUAL_FIELDS)
-            w.writeheader()
-            for k in todo:
-                w.writerow({"question_id": k["question_id"],
-                            "image_path": str(out / "images" / f"{k['question_id']}.png"),
-                            "unit": k["unit"], "reading": k["interval_low"],
-                            "scale_min": "", "scale_max": "", "minor_div": "", "notes": ""})
-        print(f"label template for {len(todo)} point_tol samples -> {a.label_template}")
     print(f"-> {out}/labels.csv (CC BY-SA 4.0: keep attribution, share derived sets alike)")
 
 
