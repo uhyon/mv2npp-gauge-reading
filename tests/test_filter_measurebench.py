@@ -72,5 +72,19 @@ def test_single_value_answers_become_point_intervals():
     assert fm.pick({"intervals": [[3, 3.5]], "units": ["bar"]}) == ("bar", (3.0, 3.5), 1, "ok")
 
 
-def test_default_types_include_sphygmomanometer():
-    assert {"pressure_gauge", "thermometer", "sphygmomanometer"} <= fm.KEEP_TYPES
+def test_default_types_exclude_sphygmomanometer():
+    assert fm.KEEP_TYPES == {"pressure_gauge", "thermometer"}
+
+
+def test_alternatives_dual_scale_keeps_both():
+    kw = {"interval": [[3, 3.1], [43, 45]], "units": [["bar"], ["psi"]]}
+    alts = fm.alternatives(kw)
+    assert [a["units"] for a in alts] == [["bar"], ["psi"]]
+    assert [a["interval"] for a in alts] == [[3.0, 3.1], [43.0, 45.0]]
+    assert not any(a["point"] for a in alts)
+
+
+def test_alternatives_single_scale_and_point():
+    assert fm.alternatives({"interval": [3, 3.5], "units": ["bar", "Bar"]}) == [
+        {"units": ["bar", "Bar"], "interval": [3.0, 3.5], "point": False}]
+    assert fm.alternatives({"value": 80, "units": ["°C"]})[0]["point"] is True

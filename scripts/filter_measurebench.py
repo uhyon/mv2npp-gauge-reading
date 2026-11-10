@@ -2,11 +2,12 @@
 
     pip install -e ".[data]"   (or: uv run --with datasets ...)
     python scripts/filter_measurebench.py --out data/processed/measurebench_dial --report
-    python scripts/filter_measurebench.py --keep-type sphygmomanometer
+    python scripts/filter_measurebench.py --keep-type sphygmomanometer   (adds 21 aneroid BP dials)
 
 Writes the kept images plus labels.csv (question_id, image_type, unit,
 interval_low, interval_high, n_intervals, source, scale_min, scale_max).
-Scale ranges are not in MeasureBench: fill scale_min/scale_max by hand for
+`alternatives` holds every acceptable (units, interval) pair, e.g. both scales of a
+bar/psi dial; evaluate with gauge_reader.eval.interval_hit. Scale ranges are not in MeasureBench: fill scale_min/scale_max by hand for
 the % FS subset. --report prints drop reasons and the raw units of every
 sample dropped for its unit.
 """
@@ -16,56 +17,17 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
+import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from gauge_reader.units import flatten, unit_kind  # noqa: E402
+
 # Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31, sphygmomanometer 21.
-# sphygmomanometer is a Bourdon-type pressure dial (mmHg), so it is kept by default.
-# Use --exclude-type sphygmomanometer for pressure_gauge + thermometer only.
-KEEP_TYPES = {"pressure_gauge", "thermometer", "sphygmomanometer"}
-
-# Normalized unit spellings (see norm_unit) -> quantity.
-UNIT_KIND = {
-    # pressure
-    "bar": "pressure", "mbar": "pressure", "millibar": "pressure", "kbar": "pressure",
-    "pa": "pressure", "pascal": "pressure", "hpa": "pressure", "hectopascal": "pressure",
-    "kpa": "pressure", "kilopascal": "pressure", "mpa": "pressure", "megapascal": "pressure",
-    "psi": "pressure", "psig": "pressure", "psia": "pressure", "lbf/in2": "pressure",
-    "lb/in2": "pressure", "poundpersquareinch": "pressure", "poundspersquareinch": "pressure",
-    "kgf/cm2": "pressure", "kg/cm2": "pressure", "kgf/cm^2": "pressure", "kg/cm^2": "pressure",
-    "kilogram-forcepersquarecentimeter": "pressure", "kilogramforcepersquarecentimeter": "pressure",
-    "atm": "pressure", "atmosphere": "pressure", "torr": "pressure",
-    "mmhg": "pressure", "millimeterofmercury": "pressure", "millimetresofmercury": "pressure",
-    "millimetersofmercury": "pressure", "millimetreofmercury": "pressure",
-    "inhg": "pressure", "inchofmercury": "pressure", "inchesofmercury": "pressure",
-    "mmh2o": "pressure", "mmaq": "pressure", "mmwc": "pressure", "inh2o": "pressure",
-    "inchesofwater": "pressure", "cmh2o": "pressure", "mh2o": "pressure",
-    # temperature
-    "°c": "temperature", "℃": "temperature", "degc": "temperature", "c": "temperature",
-    "celsius": "temperature", "degreecelsius": "temperature", "degreescelsius": "temperature",
-    "°f": "temperature", "℉": "temperature", "degf": "temperature", "f": "temperature",
-    "fahrenheit": "temperature", "degreefahrenheit": "temperature", "degreesfahrenheit": "temperature",
-}
-
-
-def norm_unit(u: str) -> str:
-    s = u.strip().lower().replace("²", "2").replace("º", "°").replace("˚", "°")
-    s = re.sub(r"[\s_.]+", "", s)
-    s = s.replace("degrees", "degree")
-    return s
-
-
-def unit_kind(u) -> str | None:
-    return UNIT_KIND.get(norm_unit(u)) if isinstance(u, str) else None
-
-
-def flatten(x) -> list:
-    """Flatten arbitrarily nested lists; a scalar becomes a one-item list."""
-    if isinstance(x, (list, tuple)):
-        return [v for item in x for v in flatten(item)]
-    return [x]
-
+# sphygmomanometer (aneroid, usually a metal-capsule mechanism; only the dial looks like a
+# pressure gauge) is optional: --keep-type sphygmomanometer
+KEEP_TYPES = {"pressure_gauge", "thermometer"}
 
 def unit_ok(units) -> bool:
     return any(unit_kind(u) for u in flatten(units))
@@ -113,6 +75,24 @@ def unit_groups(units) -> list[list[str]]:
     return [[v for v in flatten(units) if isinstance(v, str)]]
 
 
+def alternatives(kw: dict) -> list[dict]:
+    """Every acceptable (units, interval) answer of a sample.
+
+    Dual-scale dial (n intervals, n unit groups): one entry per scale, paired by position.
+    Otherwise every interval shares the single unit group.
+    A single-value answer is stored with "point": true so evaluation can add a tolerance.
+    """
+    raw = answer_field(kw)
+    point = raw is not None and not isinstance(raw, (list, tuple))
+    ivs = intervals_of(raw)
+    groups = unit_groups(kw.get("units", []))
+    if len(ivs) > 1 and len(groups) == len(ivs):
+        pairs = zip(groups, ivs)
+    else:
+        pairs = ((groups[0] if groups else [], iv) for iv in ivs)
+    return [{"units": g, "interval": [lo, hi], "point": point} for g, (lo, hi) in pairs]
+
+
 def pick(kw: dict) -> tuple[str | None, tuple[float, float] | None, int, str]:
     """Choose (unit, interval) for a sample. Returns unit, interval, n_intervals, reason.
 
@@ -158,7 +138,7 @@ def main() -> None:
     out = Path(a.out)
     (out / "images").mkdir(parents=True, exist_ok=True)
     kept, reasons, dropped_units, multi = [], Counter(), Counter(), Counter()
-    no_iv_eval, no_iv_examples = Counter(), []
+    no_iv_eval, no_iv_examples, paired_examples = Counter(), [], []
     for r in dial:
         t = r["image_type"]
         if t not in keep_types:
@@ -178,14 +158,18 @@ def main() -> None:
                     no_iv_examples.append((r["question_id"], r["evaluator"], r["evaluator_kwargs"]))
             continue
         reasons[why] += 1
+        alts = alternatives(kw)
+        if why == "ok_paired" and len(paired_examples) < 10:
+            paired_examples.append((r["question_id"], r["evaluator_kwargs"], unit, iv, alts))
         r["image"].save(out / "images" / f"{r['question_id']}.png")
         kept.append({"question_id": r["question_id"], "image_type": t, "unit": unit,
                      "interval_low": iv[0], "interval_high": iv[1], "n_intervals": n,
+                     "alternatives": json.dumps(alts, ensure_ascii=False),
                      "source": (r.get("meta_info") or {}).get("source", ""),
                      "scale_min": "", "scale_max": ""})
 
     fields = ["question_id", "image_type", "unit", "interval_low", "interval_high", "n_intervals",
-              "source", "scale_min", "scale_max"]
+              "alternatives", "source", "scale_min", "scale_max"]
     with open(out / "labels.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -197,6 +181,9 @@ def main() -> None:
         print("dropped for unit (type, raw units -> count):")
         for (t, u), c in dropped_units.most_common():
             print(f"  {t:18s} {u}  x{c}")
+        print("ok_paired examples (raw kwargs -> primary pair; all alternatives):")
+        for qid, kws, u, iv, alts in paired_examples:
+            print(f"  {qid:22s} {kws}\n      -> ({u}, {iv});  alternatives={json.dumps(alts, ensure_ascii=False)}")
         print("no_interval by (type, evaluator):", dict(no_iv_eval) or "none")
         for qid, ev, kws in no_iv_examples:
             print(f"  {qid:22s} {ev:22s} {kws}")
