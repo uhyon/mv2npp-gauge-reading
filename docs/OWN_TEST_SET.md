@@ -1,4 +1,6 @@
-# Own gauge photo test set (primary evaluation)
+# Own gauge photo test set (ON HOLD)
+
+> On hold since 2026-11-10: taking our own gauge photos is not possible for this project. The main reading test set is MeterFL (see DATASETS.md). This protocol is kept in case photos become possible later.
 
 Goal: a real-world test set with exact reading ground truth, small enough to finish by
 **2026-11-18** so evaluation (11/17–21) and the demo (11/22–25) stay on schedule.
