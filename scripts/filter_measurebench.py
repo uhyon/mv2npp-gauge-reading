@@ -1,6 +1,6 @@
 """Build the MeasureBench subset used as a secondary test set.
 
-    pip install datasets
+    pip install -e ".[data]"   (or: uv run --with datasets ...)
     python scripts/filter_measurebench.py --out data/processed/measurebench_dial
 
 Prints counts per image_type before and after filtering, and writes the kept
@@ -17,15 +17,31 @@ import json
 from collections import Counter
 from pathlib import Path
 
-KEEP_TYPES = {"pressure_gauge", "thermometer", "barometer", "hygrometer", "manometer"}
-DROP_HINTS = ("clock", "watch", "ammeter", "voltmeter", "multimeter", "meter_", "energy", "utility",
-              "speedometer", "tachometer", "compass", "odometer")
+# Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31 -> up to 149 kept.
+# sphygmomanometer (21, Bourdon-type) is optional: --keep-type sphygmomanometer
+KEEP_TYPES = {"pressure_gauge", "thermometer"}
 UNITS = {"bar", "kpa", "mpa", "psi", "kgf/cm2", "kgf/cm²", "mmh2o", "inhg", "mbar", "hpa",
          "°c", "°f", "c", "f", "celsius", "fahrenheit", "degree celsius", "degree fahrenheit"}
 
 
-def unit_ok(units: list[str]) -> bool:
-    return any(u.strip().lower() in UNITS for u in units)
+def flatten(x) -> list:
+    """Flatten arbitrarily nested lists; a scalar becomes a one-item list."""
+    if isinstance(x, (list, tuple)):
+        return [v for item in x for v in flatten(item)]
+    return [x]
+
+
+def unit_ok(units) -> bool:
+    return any(isinstance(u, str) and u.strip().lower() in UNITS for u in flatten(units))
+
+
+def first_interval(interval) -> tuple[float, float] | None:
+    """[lo, hi] or [[lo, hi], ...] -> (lo, hi) of the first interval."""
+    if not interval:
+        return None
+    if isinstance(interval[0], (list, tuple)):
+        return first_interval(interval[0])
+    return float(interval[0]), float(interval[-1])
 
 
 def main() -> None:
@@ -48,13 +64,15 @@ def main() -> None:
     for r in dial:
         t = r["image_type"]
         kw = json.loads(r["evaluator_kwargs"])
-        if t not in keep_types or any(h in t for h in DROP_HINTS) or not unit_ok(kw.get("units", [])):
+        if t not in keep_types or not unit_ok(kw.get("units", [])):
             continue
-        intervals = kw.get("interval")
-        lo, hi = (intervals if intervals and not isinstance(intervals[0], list) else intervals[0])
+        iv = first_interval(kw.get("interval"))
+        if iv is None:
+            continue
+        lo, hi = iv
         path = out / "images" / f"{r['question_id']}.png"
         r["image"].save(path)
-        kept.append({"question_id": r["question_id"], "image_type": t, "unit": kw["units"][0],
+        kept.append({"question_id": r["question_id"], "image_type": t, "unit": next(u for u in flatten(kw["units"]) if isinstance(u, str)),
                      "interval_low": lo, "interval_high": hi,
                      "source": (r.get("meta_info") or {}).get("source", ""),
                      "scale_min": "", "scale_max": ""})
