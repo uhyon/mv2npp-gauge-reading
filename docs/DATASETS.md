@@ -13,8 +13,8 @@ Checked on 2026-11-10 (Roboflow sets downloaded and inspected by hand).
 | [RPM-10K](https://github.com/Event-AHU/DialBench) (Wang et al., 2025) | real, 10,730, 300+ dial types | text reading only | dataset TBD (code BSD-3) | not used until a license is published |
 
 Caveats
-- hustlegrad images were exported with a 640x640 stretch resize, which distorts the aspect ratio and therefore needle angles. Evaluate angles after undoing the stretch (scale x and y back to the original size) or use the needle fraction between the Min and Max points, which is less sensitive.
-- Use only the 245 original train images (drop the brightness-augmented copies) when the set is used for evaluation, so no image is counted three times.
+- hustlegrad images were exported with a 640x640 stretch resize, and the export does not keep the original image sizes, so the stretch cannot be undone exactly. Estimate it per image from the Gauge box aspect ratio (dials are circular, assuming a roughly frontal view) and rescale x or y to make the box square before measuring angles. Report needle-fraction metrics alongside, and note the residual distortion for oblique views.
+- For evaluation, dedupe train to its 245 originals (group files by the name prefix before `.rf.`) and keep valid (49) and test (32), which are not augmented. The evaluation set is the 326 originals.
 - Neither Roboflow set has a reading ground truth. % of full scale error is measured on Cambridge RealGauges and on our own photos.
 
 Rules
