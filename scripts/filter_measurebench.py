@@ -29,6 +29,12 @@ from gauge_reader.units import convert, flatten, norm_unit, unit_kind  # noqa: E
 # pressure gauge) is optional: --keep-type sphygmomanometer
 KEEP_TYPES = {"pressure_gauge", "thermometer"}
 
+# Misclassified samples found by hand with --inspect (question_id -> reason). Always dropped.
+EXCLUDE_IDS = {
+    "pressure_gauge_6": "barometer; question reads the auxiliary 0-50 °C thermometer (checked 2026-11-10)",
+    "pressure_gauge_39": "sphygmomanometer, needle-type 0-300 mmHg with bulb (checked 2026-11-10)",
+}
+
 def unit_ok(units) -> bool:
     return any(unit_kind(u) for u in flatten(units))
 
@@ -138,7 +144,7 @@ def sanity_flags(image_type: str, alts: list[dict]) -> list[str]:
         for a in alts:
             if any(isinstance(u, str) and norm_unit(u) in ("mmhg", "millimeterofmercury") for u in a["units"]):
                 mid = sum(a["interval"]) / 2
-                if 0 <= mid <= 320:
+                if 0 <= mid < 320:  # negative mmHg = vacuum gauge, not a BP dial
                     flags.append("possible_sphygmomanometer")
                     break
     return flags
@@ -256,7 +262,7 @@ def main() -> None:
                 print(json.dumps({k: r[k] for k in ("question_id", "question", "image_type", "design",
                                                     "evaluator", "evaluator_kwargs", "meta_info")},
                                  ensure_ascii=False, indent=1, default=str))
-        print(f"images -> {out}")
+        print(f"images -> {out.resolve()}")
         return
 
     manual = {}
@@ -272,6 +278,9 @@ def main() -> None:
     zero_width, baro = [], []
     for r in dial:
         t = r["image_type"]
+        if r["question_id"] in EXCLUDE_IDS:
+            reasons["manual_exclude"] += 1
+            continue
         if t not in keep_types:
             reasons["type"] += 1
             continue
@@ -328,6 +337,10 @@ def main() -> None:
     print("samples with several intervals (type, outcome):", dict(multi) or "none")
     if a.report:
         print("outcome counts:", dict(reasons))
+        for flag in ("temperature_unit_on_pressure_gauge", "possible_sphygmomanometer",
+                     "pressure_unit_on_thermometer"):
+            ids = [k["question_id"] for k in flagged if flag in k["flags"].split(";")]
+            print(f"  {flag}: {len(ids)} {ids}")
         print("dropped for unit (type, raw units -> count):")
         for (t, u), c in dropped_units.most_common():
             print(f"  {t:18s} {u}  x{c}")
@@ -342,7 +355,9 @@ def main() -> None:
         for qid, ev, kws in no_iv_examples:
             print(f"  {qid:22s} {ev:22s} {kws}")
     flagged = [k for k in kept if k["flags"]]
-    print(f"sanity flags (check by hand with --inspect): {len(flagged)}")
+    by_flag = Counter(f for k in flagged for f in k["flags"].split(";"))
+    print(f"manually excluded: {len(EXCLUDE_IDS)} ({', '.join(EXCLUDE_IDS)})")
+    print(f"sanity flags (check by hand with --inspect): {len(flagged)}", dict(by_flag) or "")
     for k in flagged:
         print(f"  {k['question_id']:22s} {k['unit']} [{k['interval_low']}, {k['interval_high']}] {k['flags']}")
     if a.label_template:

@@ -144,6 +144,12 @@ def test_sanity_flags():
     assert fm.sanity_flags("pressure_gauge", alt("mmHg", 298, 298)) == ["possible_sphygmomanometer"]
     assert fm.sanity_flags("pressure_gauge", alt("mmHg", 755, 760)) == []
     assert fm.sanity_flags("pressure_gauge", alt("bar", 3, 3.5)) == []
+    assert fm.sanity_flags("pressure_gauge", alt("mmHg", -300, -290)) == []  # vacuum gauge
+    assert fm.sanity_flags("pressure_gauge", alt("mmHg", 320, 320)) == []
+
+
+def test_manual_excludes():
+    assert set(fm.EXCLUDE_IDS) == {"pressure_gauge_6", "pressure_gauge_39"}
 
 
 def test_apply_manual_minor_div():
