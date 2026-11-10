@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data and artifacts (never commit datasets: see docs/DATASETS.md)
+data/raw/*
+data/synthetic/*
+data/processed/*
+!data/**/.gitkeep
+runs/
+weights/
+*.pt
+*.onnx
+wandb/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env

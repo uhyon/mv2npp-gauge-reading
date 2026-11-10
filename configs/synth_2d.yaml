@@ -1,0 +1,25 @@
+# 2D synthetic gauge generator (phase 2, 11/12-11/16)
+num_images: 20000
+image_size: 640
+seed: 42
+
+dial:
+  ranges: [[0, 10], [0, 16], [0, 25], [0, 100], [-1, 1], [0, 150]]  # value ranges
+  units: ["bar", "kgf/cm2", "MPa", "psi", "°C", "mmH2O"]
+  sweep_deg: [180, 270]          # total scale arc
+  major_ticks: [5, 11]           # number of labelled ticks
+  fonts_dir: assets/fonts
+
+camera:
+  yaw_deg: [-50, 50]
+  pitch_deg: [-40, 40]
+  scale: [0.25, 0.9]             # gauge diameter / image size
+
+nuclear_conditions:              # NPP field conditions to randomize
+  low_light_prob: 0.3
+  glare_prob: 0.3                # glass cover reflection
+  motion_blur_prob: 0.2
+  radiation_speckle_prob: 0.2    # salt-and-pepper / hot pixel noise
+  dirt_prob: 0.2
+
+backgrounds_dir: assets/backgrounds   # pipes, valves, plant interiors (own photos or CC0)

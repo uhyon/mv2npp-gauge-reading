@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gauge-reader"
+version = "0.1.0"
+description = "Analog gauge reading for nuclear power plant rounds, trained on synthetic data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python>=4.8",
+  "pyyaml>=6.0",
+  "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+train = ["torch>=2.2", "ultralytics>=8.3", "wandb"]
+ocr = ["paddleocr>=2.7"]
+demo = ["gradio>=4.0", "onnxruntime>=1.17"]
+data = ["huggingface_hub>=0.23", "roboflow>=1.1"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
