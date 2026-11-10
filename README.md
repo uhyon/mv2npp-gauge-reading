@@ -21,7 +21,12 @@ photo -> 1. gauge detection (YOLO)
 
 Training data comes from our own synthetic generator that randomizes dial design, camera pose and
 NPP field conditions (low light, glass glare, motion blur, radiation speckle noise, dirt).
-Evaluation uses public real images only. See [docs/DATASETS.md](docs/DATASETS.md).
+Evaluation uses public real images only: MeterFL for reading error, MeasureBench for interval hit rate,
+and Roboflow sets for keypoints and detection, plus a robustness test that adds low light, radiation
+speckle noise and motion blur to those images. See [docs/DATASETS.md](docs/DATASETS.md).
+
+**Limitation:** no photos of actual nuclear power plant gauges are in the evaluation. NPP field
+conditions are approximated by synthetic degradation.
 
 ## Targets
 

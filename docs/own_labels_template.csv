@@ -1,0 +1,2 @@
+image,gauge_id,shot,type,unit,scale_min,scale_max,sweep_deg,minor_tick,reading,reading_unc,view_deg,light,location,notes
+g01_01.jpg,g01,1,bourdon_pressure,kgf/cm2,0,10,270,0.2,4.3,0.1,0,normal,example,delete this row
