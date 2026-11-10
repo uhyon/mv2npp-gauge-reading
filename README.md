@@ -21,7 +21,7 @@ photo -> 1. gauge detection (YOLO)
 
 Training data comes from our own synthetic generator that randomizes dial design, camera pose and
 NPP field conditions (low light, glass glare, motion blur, radiation speckle noise, dirt).
-Evaluation uses public real images only. See [docs/DATASETS.md](docs/DATASETS.md).
+Evaluation uses our own gauge photos plus public real images (MeasureBench, MeterFL). See [docs/DATASETS.md](docs/DATASETS.md).
 
 ## Targets
 
