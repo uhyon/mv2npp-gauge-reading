@@ -271,7 +271,7 @@ def main(argv: list[str] | None = None, rows=None) -> None:
 
     manual = {}
     if a.manual_labels:
-        with open(a.manual_labels, encoding="utf-8") as f:
+        with open(a.manual_labels, encoding="utf-8-sig") as f:
             manual = {row["question_id"]: row for row in csv.DictReader(f)}
 
     keep_types = (KEEP_TYPES | set(a.keep_type)) - set(a.exclude_type)
@@ -335,7 +335,7 @@ def main(argv: list[str] | None = None, rows=None) -> None:
     # all files are written before any report output, so a report bug cannot lose them
     if a.label_template:
         todo = [k for k in kept if "point_tol" in k["tol_method"]]
-        with open(a.label_template, "w", newline="", encoding="utf-8") as f:
+        with open(a.label_template, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=MANUAL_FIELDS)
             w.writeheader()
             for k in todo:
