@@ -7,7 +7,7 @@ temperature and differential-pressure gauges by eye. This project builds an end-
 that reads a gauge from a photo, flags out-of-range values, and asks for a retake when unsure,
 for patrol robots, drones or a phone in an operator's hand.
 
-> Status: phase 1 (research and setup), 2026-11-10. Target: portfolio-ready demo by 2026-11-26.
+> Status: phase 2 (synthetic generator), 2026-11-11. Target: portfolio-ready demo by 2026-11-26.
 
 ## Pipeline
 
@@ -24,6 +24,10 @@ NPP field conditions (low light, glass glare, motion blur, radiation speckle noi
 Evaluation uses public real images only: MeterFL for reading error, MeasureBench for interval hit rate,
 and Roboflow sets for keypoints and detection, plus a robustness test that adds low light, radiation
 speckle noise and motion blur to those images. See [docs/DATASETS.md](docs/DATASETS.md).
+
+![Synthetic samples](docs/img/synth_samples.jpg)
+
+Synthetic generator: [docs/SYNTHETIC.md](docs/SYNTHETIC.md).
 
 **Limitation:** no photos of actual nuclear power plant gauges are in the evaluation. NPP field
 conditions are approximated by synthetic degradation.
@@ -45,7 +49,7 @@ data/               raw, synthetic, processed (git-ignored)
 docs/               datasets, related work, experiment notes
 scripts/            download_data.py and other entry points
 src/gauge_reader/
-  synth/            synthetic gauge generator
+  synth/            synthetic gauge generator (dial.py, scene.py)
   detection/        stage 1
   keypoints/        stage 3
   reading/          stage 5: geometry.py (angle -> value, alarm)
@@ -59,6 +63,7 @@ demo/               Gradio app (Hugging Face Spaces)
 pip install -e ".[dev]"
 pytest
 python scripts/download_data.py --help
+python scripts/generate_synth.py --num 24 --preview preview.jpg
 ```
 
 ## Related work

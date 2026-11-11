@@ -200,7 +200,7 @@ def test_main_end_to_end_report(tmp_path, capsys):
     assert labels["pressure_gauge_5"]["flags"] == "temperature_unit_on_pressure_gauge"
     assert (tmp_path / "images" / "thermometer_1.png").exists()
 
-    with open(tmpl, encoding="utf-8") as f:
+    with open(tmpl, encoding="utf-8-sig") as f:
         todo = list(csv.DictReader(f))
     assert [r["question_id"] for r in todo] == ["pressure_gauge_3"]
 
