@@ -34,3 +34,14 @@ def test_inches_of_water_is_not_inhg(u):
 def test_incompatible_units():
     assert convert(1, "bar", "°C") is None
     assert convert(1, "A", "V") is None
+
+
+def test_meterfl_plurals_and_typos():
+    from gauge_reader.units import convert, norm_unit, unit_kind
+
+    for u in ["megapascals", "megapascals ", "magepascals", "megapascasl", "kilopascals"]:
+        assert unit_kind(u) == "pressure"
+    assert norm_unit("magepascals") == "megapascal"
+    assert convert(1.1, "kilopascals", "megapascals") == 1.1e-3
+    # Plain abbreviations ending in s are not stripped.
+    assert norm_unit("psi") == "psi" and norm_unit("mmHg") == "mmhg"

@@ -1,0 +1,5 @@
+id,field,meterfl_value,corrected_value,checked_by,date,note
+voc_new_444,reading_gt,0.035,0.036,uhyon,2026-11-11,hand check of 30 sampled test images
+voc_new_170,reading_gt,6.1,6.2,uhyon,2026-11-11,hand check of 30 sampled test images
+voc_new_337,reading_gt,1.11,1.10,uhyon,2026-11-11,"gauge faces down-right; parallax makes the needle look higher (read as 1.11)"
+voc_roi_image_0_20240712104752,unit,magepascals,megapascals,uhyon,2026-11-11,typo (also normalized by gauge_reader.units.ALIASES)
