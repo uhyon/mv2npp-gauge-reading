@@ -1,25 +1,34 @@
 # 2D synthetic gauge generator (phase 2, 11/12-11/16)
+# python scripts/generate_synth.py --config configs/synth_2d.yaml --out data/synthetic/synth_2d
 num_images: 20000
 image_size: 640
 seed: 42
 
 dial:
-  ranges: [[0, 10], [0, 16], [0, 25], [0, 100], [-1, 1], [0, 150]]  # value ranges
-  units: ["bar", "kgf/cm2", "MPa", "psi", "°C", "mmH2O"]
-  sweep_deg: [180, 270]          # total scale arc
+  # value ranges; each image pairs a random range with a random unit
+  ranges: [[0, 1], [0, 1.6], [0, 2.5], [0, 4], [0, 6], [0, 10], [0, 16], [0, 25], [0, 40],
+           [0, 60], [0, 100], [0, 150], [0, 160], [0, 250], [0, 400], [-1, 1], [-1, 0],
+           [-0.1, 0.5], [-20, 60], [0, 200]]
+  units: ["bar", "kgf/cm2", "MPa", "kPa", "psi", "°C", "mmH2O"]
+  sweep_deg: [180, 270]          # total scale arc (270 most common)
   major_ticks: [5, 11]           # number of labelled ticks
-  fonts_dir: assets/fonts
+  second_scale_prob: 0.15        # inner psi/bar scale (dual-scale dials)
+  fonts_dir: assets/fonts        # empty or missing -> system fonts
 
 camera:
   yaw_deg: [-50, 50]
   pitch_deg: [-40, 40]
+  roll_deg: [-15, 15]
+  focal: [0.8, 2.5]              # focal length / image size (lower = stronger perspective)
   scale: [0.25, 0.9]             # gauge diameter / image size
 
 nuclear_conditions:              # NPP field conditions to randomize
-  low_light_prob: 0.3
-  glare_prob: 0.3                # glass cover reflection
-  motion_blur_prob: 0.2
-  radiation_speckle_prob: 0.2    # salt-and-pepper / hot pixel noise
-  dirt_prob: 0.2
+  low_light_prob: 0.3            # dim + optional torch spot + amplified sensor noise
+  glare_prob: 0.3                # glass cover reflection (spot or window band)
+  motion_blur_prob: 0.2          # walking operator / moving robot
+  defocus_prob: 0.15             # only when no motion blur
+  radiation_speckle_prob: 0.2    # gamma hits: hot pixels, blobs, short streaks
+  dirt_prob: 0.2                 # dust and stains on the glass
 
-backgrounds_dir: assets/backgrounds   # pipes, valves, plant interiors (own photos or CC0)
+backgrounds_dir: assets/backgrounds   # pipes, valves, plant interiors (own photos or CC0);
+                                      # empty or missing -> procedural pipes and walls
