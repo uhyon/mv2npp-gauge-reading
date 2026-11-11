@@ -30,10 +30,21 @@ UNIT_KIND = {
 }
 
 
+# Misspellings seen in dataset labels -> normalized spelling.
+ALIASES = {
+    "magepascals": "megapascal",   # MeterFL voc_roi_image_0_20240712104752 (2026-11-11)
+    "megapascasl": "megapascal",   # MeterFL reading labels
+}
+
+
 def norm_unit(u: str) -> str:
     s = u.strip().lower().replace("²", "2").replace("º", "°").replace("˚", "°")
     s = re.sub(r"[\s_.]+", "", s)
     s = s.replace("degrees", "degree")
+    s = ALIASES.get(s, s)
+    # Plural spelled-out names (MeterFL writes "megapascals", "kilopascals").
+    if s not in UNIT_KIND and s.endswith("s") and s[:-1] in UNIT_KIND:
+        s = s[:-1]
     return s
 
 
