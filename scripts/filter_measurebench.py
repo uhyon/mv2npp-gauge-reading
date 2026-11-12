@@ -33,6 +33,17 @@ KEEP_TYPES = {"pressure_gauge", "thermometer"}
 EXCLUDE_IDS = {
     "pressure_gauge_6": "barometer; question reads the auxiliary 0-50 °C thermometer (checked 2026-11-10)",
     "pressure_gauge_39": "sphygmomanometer, needle-type 0-300 mmHg with bulb (checked 2026-11-10)",
+    # Ambiguous target needle (hand labelling, 2026-11-12): a single-needle reader cannot know
+    # which needle or gauge the answer refers to.
+    "pressure_gauge_1": "answer is the red max-hold pointer (2200 psi); the black needle reads 0",
+    "pressure_gauge_45": "two gauges with two needles each; answer is the left gauge's black needle",
+    "pressure_gauge_65": "two gauges with two needles each; answer is the left gauge's black needle",
+    "pressure_gauge_49": "three same-range gauges whose needles differ by 2-3% FS",
+}
+
+# Kept but marked in the flags column, so results can be shown with and without them.
+FLAG_IDS = {
+    "pressure_gauge_104": "oblique_view",  # 10-20 ticks hidden, strong parallax (2026-11-12)
 }
 
 def unit_ok(units) -> bool:
@@ -290,12 +301,17 @@ def main(argv: list[str] | None = None, rows=None) -> None:
             continue
         kw = json.loads(r["evaluator_kwargs"])
         unit, iv, n, why = pick(kw)
+        fill = (manual.get(r["question_id"]) or {}).get("unit", "").strip()
+        if why == "unit" and fill and unit_kind(fill):  # unit missing in MeasureBench, filled by hand
+            kw = dict(kw, units=[fill])
+            unit, iv, n, why = pick(kw)
+            reasons["unit_filled_by_hand"] += 1
         if n > 1:
             multi[(t, why)] += 1
         if unit is None:
             reasons[why] += 1
             if why == "unit":
-                dropped_units[(t, json.dumps(kw.get("units"), ensure_ascii=False))] += 1
+                dropped_units[(t, r["question_id"], json.dumps(kw.get("units"), ensure_ascii=False))] += 1
             if why == "no_interval":
                 no_iv_eval[(t, r["evaluator"])] += 1
                 if len(no_iv_examples) < 10:
@@ -307,6 +323,8 @@ def main(argv: list[str] | None = None, rows=None) -> None:
         if r["question_id"] in manual:
             alts, scale = apply_manual(alts, manual[r["question_id"]])
         flags = sanity_flags(t, alts)
+        if r["question_id"] in FLAG_IDS:
+            flags.append(FLAG_IDS[r["question_id"]])
         subtype = "barometer" if t == "pressure_gauge" and is_barometer(alts) else t
         if subtype == "barometer":
             baro.append((r["question_id"], unit, iv))
@@ -359,9 +377,9 @@ def main(argv: list[str] | None = None, rows=None) -> None:
                      "pressure_unit_on_thermometer"):
             ids = [k["question_id"] for k in flagged if flag in k["flags"].split(";")]
             print(f"  {flag}: {len(ids)} {ids}")
-        print("dropped for unit (type, raw units -> count):")
-        for (t, u), c in dropped_units.most_common():
-            print(f"  {t:18s} {u}  x{c}")
+        print("dropped for unit (type, question_id, raw units); fill `unit` in --manual-labels to keep:")
+        for (t, qid, u), _ in dropped_units.most_common():
+            print(f"  {t:18s} {qid:22s} {u}")
         print("ok_paired examples (raw kwargs -> primary pair; all alternatives):")
         for qid, kws, u, iv, alts in paired_examples:
             print(f"  {qid:22s} {kws}\n      -> ({u}, {iv});  alternatives={json.dumps(alts, ensure_ascii=False)}")
