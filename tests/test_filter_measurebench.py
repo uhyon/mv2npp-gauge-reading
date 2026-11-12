@@ -149,7 +149,9 @@ def test_sanity_flags():
 
 
 def test_manual_excludes():
-    assert set(fm.EXCLUDE_IDS) == {"pressure_gauge_6", "pressure_gauge_39"}
+    assert {"pressure_gauge_6", "pressure_gauge_39", "pressure_gauge_1", "pressure_gauge_45",
+            "pressure_gauge_49", "pressure_gauge_65"} == set(fm.EXCLUDE_IDS)
+    assert fm.FLAG_IDS == {"pressure_gauge_104": "oblique_view", "pressure_gauge_78": "nonlinear_scale"}
 
 
 def test_apply_manual_minor_div():
@@ -175,7 +177,7 @@ def test_main_end_to_end_report(tmp_path, capsys):
     import csv
 
     rows = [
-        _row("pressure_gauge_1", "pressure_gauge", {"interval": [[3, 3.1], [43, 45]], "units": [["bar"], ["psi"]]}),
+        _row("pressure_gauge_901", "pressure_gauge", {"interval": [[3, 3.1], [43, 45]], "units": [["bar"], ["psi"]]}),
         _row("pressure_gauge_2", "pressure_gauge", {"interval": [[800, 900], [6000, 6000]],
                                                     "units": [["psi"], ["kPa"]]}),
         _row("pressure_gauge_3", "pressure_gauge", {"interval": [6000, 6000], "units": ["kPa"]}),
@@ -192,7 +194,7 @@ def test_main_end_to_end_report(tmp_path, capsys):
 
     with open(tmp_path / "labels.csv", encoding="utf-8") as f:
         labels = {r["question_id"]: r for r in csv.DictReader(f)}
-    assert set(labels) == {"pressure_gauge_1", "pressure_gauge_2", "pressure_gauge_3", "pressure_gauge_4",
+    assert set(labels) == {"pressure_gauge_901", "pressure_gauge_2", "pressure_gauge_3", "pressure_gauge_4",
                            "pressure_gauge_5", "thermometer_1"}
     assert labels["pressure_gauge_4"]["subtype"] == "barometer"
     assert labels["pressure_gauge_2"]["tol_method"].startswith("converted")
@@ -213,6 +215,28 @@ def test_main_end_to_end_report(tmp_path, capsys):
 
 def test_main_exclude_barometer(tmp_path, capsys):
     rows = [_row("pressure_gauge_4", "pressure_gauge", {"interval": [985, 990], "units": ["hPa"]}),
-            _row("pressure_gauge_1", "pressure_gauge", {"interval": [3, 4], "units": ["bar"]})]
+            _row("pressure_gauge_901", "pressure_gauge", {"interval": [3, 4], "units": ["bar"]})]
     fm.main(["--out", str(tmp_path), "--exclude-type", "barometer", "--report"], rows=rows)
     assert "kept: 1" in capsys.readouterr().out
+
+
+def test_main_unit_filled_by_hand_and_flag_ids(tmp_path, capsys):
+    import csv
+
+    rows = [_row("thermometer_900", "thermometer", {"interval": [20, 22], "units": [""]}),
+            _row("pressure_gauge_104", "pressure_gauge", {"interval": [12, 14], "units": ["bar"]})]
+    fm.main(["--out", str(tmp_path / "a"), "--report"], rows=rows)
+    out = capsys.readouterr().out
+    assert "kept: 1" in out and "thermometer_900" in out  # unit drop lists its question_id
+
+    manual = tmp_path / "manual.csv"
+    with open(manual, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fm.MANUAL_FIELDS)
+        w.writeheader()
+        w.writerow({"question_id": "thermometer_900", "unit": "°C"})
+    fm.main(["--out", str(tmp_path / "b"), "--manual-labels", str(manual)], rows=rows)
+    assert "kept: 2" in capsys.readouterr().out
+    with open(tmp_path / "b" / "labels.csv", encoding="utf-8") as f:
+        labels = {r["question_id"]: r for r in csv.DictReader(f)}
+    assert labels["thermometer_900"]["unit"] == "°C"
+    assert labels["pressure_gauge_104"]["flags"] == "oblique_view"
