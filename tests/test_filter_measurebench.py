@@ -240,3 +240,8 @@ def test_main_unit_filled_by_hand_and_flag_ids(tmp_path, capsys):
         labels = {r["question_id"]: r for r in csv.DictReader(f)}
     assert labels["thermometer_900"]["unit"] == "°C"
     assert labels["pressure_gauge_104"]["flags"] == "oblique_view"
+
+
+def test_reversed_interval_is_sorted():
+    assert fm.intervals_of([32, 30]) == [(30.0, 32.0)]
+    assert fm.intervals_of([[-10, -20], [14, -4]]) == [(-20.0, -10.0), (-4.0, 14.0)]

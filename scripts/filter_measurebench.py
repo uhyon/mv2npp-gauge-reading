@@ -60,7 +60,10 @@ def _num(x) -> float | None:
 
 
 def intervals_of(interval) -> list[tuple[float, float]]:
-    """[lo, hi] -> [(lo, hi)];  [[lo, hi], [lo2, hi2]] -> both;  a single number v -> [(v, v)]."""
+    """[lo, hi] -> [(lo, hi)];  [[lo, hi], [lo2, hi2]] -> both;  a single number v -> [(v, v)].
+
+    Each pair is returned sorted (lo <= hi), whatever order the label used.
+    """
     if interval is None or interval == [] or interval == "":
         return []
     if not isinstance(interval, (list, tuple)):
@@ -68,7 +71,10 @@ def intervals_of(interval) -> list[tuple[float, float]]:
         return [] if v is None else [(v, v)]
     if isinstance(interval[0], (list, tuple)):
         return [iv for item in interval for iv in intervals_of(item)]
-    return [(float(interval[0]), float(interval[-1]))]
+    lo, hi = float(interval[0]), float(interval[-1])
+    # Some labels list the interval high-to-low (e.g. a thermometer [32, 30]); sort so
+    # "lo <= value <= hi" holds in every later check.
+    return [(min(lo, hi), max(lo, hi))]
 
 
 def first_interval(interval) -> tuple[float, float] | None:
