@@ -48,5 +48,19 @@ reading them with `read_value` gives the true value exactly.
 ## Known gaps (next)
 
 - Non-linear scales (e.g. square-root flow dials) and multi-turn dials are not generated.
-- No real plant background photos are bundled; add own or CC0 photos to `assets/backgrounds/`.
 - Unit and range are paired at random, so some pairs are unrealistic (e.g. -20-60 MPa).
+
+## Background photos
+
+`scripts/download_backgrounds.py` fetches CC0, public-domain and CC BY photos of pipes, valves,
+pump rooms and turbine halls from [Openverse](https://openverse.org) into `assets/backgrounds/`,
+with a credit line per photo in `assets/backgrounds/ATTRIBUTION.csv`. Photos are not committed.
+
+```bash
+uv run python scripts/download_backgrounds.py            # about 300 photos, 15 per search term
+uv run python scripts/download_backgrounds.py --sheet    # rebuild review sheets after deleting
+```
+
+Review `assets/backgrounds_review/review_*.jpg` and delete photos that show a round dial gauge:
+an unlabelled gauge in the background teaches the detector to ignore real gauges.
+Credit CC BY photos (creator, licence, link from the CSV) wherever a synthetic image is shown.
