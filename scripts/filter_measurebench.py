@@ -44,6 +44,7 @@ EXCLUDE_IDS = {
 # Kept but marked in the flags column, so results can be shown with and without them.
 FLAG_IDS = {
     "pressure_gauge_104": "oblique_view",  # 10-20 ticks hidden, strong parallax (2026-11-12)
+    "pressure_gauge_78": "nonlinear_scale",  # only 0-60 psi is linear; 60-150 is a red band
 }
 
 def unit_ok(units) -> bool:

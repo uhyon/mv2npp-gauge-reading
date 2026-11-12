@@ -151,7 +151,7 @@ def test_sanity_flags():
 def test_manual_excludes():
     assert {"pressure_gauge_6", "pressure_gauge_39", "pressure_gauge_1", "pressure_gauge_45",
             "pressure_gauge_49", "pressure_gauge_65"} == set(fm.EXCLUDE_IDS)
-    assert fm.FLAG_IDS == {"pressure_gauge_104": "oblique_view"}
+    assert fm.FLAG_IDS == {"pressure_gauge_104": "oblique_view", "pressure_gauge_78": "nonlinear_scale"}
 
 
 def test_apply_manual_minor_div():
