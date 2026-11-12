@@ -71,3 +71,19 @@ def test_needle_tip_is_drawn_on_needle():
     x, y = r.tip[0] + dx / n * 8, r.tip[1] + dy / n * 8
     px = img[round(y), round(x)]
     assert px[0] > 150 and px[1] < 100
+
+
+def test_case_wall_extends_bbox_at_oblique_view():
+    cfg = dict(CFG, camera={"yaw_deg": [45, 45], "pitch_deg": [0, 0], "roll_deg": [0, 0],
+                            "focal": [1.5, 1.5], "scale": [0.5, 0.5]})
+    flat = make_sample(np.random.default_rng(3), dict(cfg, case={"depth": [0, 0], "recess": [0, 0]}))
+    deep = make_sample(np.random.default_rng(3), dict(cfg, case={"depth": [0.4, 0.4],
+                                                                "recess": [0.05, 0.05]}))
+    w = lambda s: s.bbox[2] - s.bbox[0]
+    assert w(deep) > w(flat) * 1.1          # the side wall shows
+    assert deep.camera["case_depth"] > 0 and flat.camera["face_recess"] == 0
+    # Recessed face: the homography is not the front-plane one, but labels stay exact.
+    Hinv = np.linalg.inv(deep.homography)
+    back = dict(zip(deep.keypoints, apply_h(Hinv, list(deep.keypoints.values()))))
+    sp = deep.spec
+    assert read_value(kp(back), sp.min_value, sp.max_value) == pytest.approx(deep.value, abs=1e-6)

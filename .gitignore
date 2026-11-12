@@ -24,3 +24,8 @@ Thumbs.db
 .vscode/
 .idea/
 .env
+
+# Downloaded background photos (credits stay in ATTRIBUTION.csv, also not committed)
+assets/backgrounds/*
+assets/backgrounds_review/
+!assets/backgrounds/.gitkeep

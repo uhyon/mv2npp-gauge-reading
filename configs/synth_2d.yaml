@@ -22,6 +22,10 @@ camera:
   focal: [0.8, 2.5]              # focal length / image size (lower = stronger perspective)
   scale: [0.25, 0.9]             # gauge diameter / image size
 
+case:                            # 3D case, as fractions of the gauge diameter
+  depth: [0.15, 0.5]             # side wall depth (visible at oblique views)
+  recess: [0.02, 0.08]           # face behind the glass/bezel (parallax); [0, 0] = flat
+
 nuclear_conditions:              # NPP field conditions to randomize
   low_light_prob: 0.3            # dim + optional torch spot + amplified sensor noise
   glare_prob: 0.3                # glass cover reflection (spot or window band)

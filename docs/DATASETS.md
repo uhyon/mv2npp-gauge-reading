@@ -14,6 +14,28 @@ Checked on 2026-11-10 (Roboflow sets downloaded and inspected by hand).
 | 5 | NPP-condition robustness | the real images of 1–4 with synthetic degradations | drop in each metric per condition and severity, vs. clean | see "Robustness protocol" |
 | opt. | Cambridge RealGauges | only if the authors reply with a working link | % FS, angle error | comparability with Howells 2021 and Reitsma 2024 |
 
+### Running the evaluation
+
+`scripts/evaluate.py` loads either set as one sample list (`gauge_reader.eval.datasets`), applies
+the MeterFL hand corrections, and scores a predictions CSV (`gauge_reader.eval.report`):
+
+```bash
+uv run python scripts/evaluate.py manifest meterfl --out data/processed/meterfl_manifest.csv
+# run the reader on the manifest, fill value (and pred_unit), save as pred.csv
+uv run python scripts/evaluate.py score meterfl --pred pred.csv --out runs/eval/meterfl
+uv run python scripts/evaluate.py score measurebench --pred pred.csv --out runs/eval/mb --no-barometers
+```
+
+Reported: coverage (blank value = the reader declined), mean and median % FS, share within 2% FS
+(of answered images, and of all images with declines counted as failures), interval hit rate,
+and the same per range group, per subset (MeterFL client folder, MeasureBench subtype), per
+tolerance method and per flag, plus results without flagged samples. A predicted unit different
+from the label unit is converted before % FS. `rows.csv` lists every image, worst first.
+
+Floor to beat: `--baseline midscale` (always read the middle of the scale) gives **20.7% FS mean,
+3% of images within 2% FS** on the 262 MeterFL pressure gauges (4 hand-corrected labels).
+`--baseline oracle` must give 0.
+
 ### Robustness protocol
 
 Each condition is applied at three severities (1 mild, 2 moderate, 3 severe) to the clean test images, one condition at a time, with a fixed seed so every model sees the same images.
