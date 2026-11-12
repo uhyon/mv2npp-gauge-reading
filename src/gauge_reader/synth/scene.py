@@ -86,9 +86,22 @@ def list_backgrounds(bg_dir: str | None) -> list[str]:
 
 # ------------------------------------------------------------------ glass layer
 
-def add_glare(rng: np.random.Generator, dial: np.ndarray, center: Point, radius: float) -> None:
-    """Specular reflection on the cover glass: a soft ellipse or a window band."""
-    h, w = dial.shape[:2]
+def _over(layer: np.ndarray, a: np.ndarray, col: np.ndarray) -> None:
+    """Composite colour ``col`` with alpha ``a`` (HxW) over a float RGBA ``layer`` in place."""
+    a = a[..., None]
+    la = layer[..., 3:4]
+    out_a = a + la * (1 - a)
+    rgb = (col * a + layer[..., :3] * la * (1 - a)) / np.maximum(out_a, 1e-6)
+    layer[..., :3] = rgb
+    layer[..., 3:4] = out_a
+
+
+def add_glare(rng: np.random.Generator, glass: np.ndarray, center: Point, radius: float) -> None:
+    """Specular reflection on the cover glass: a soft ellipse or a window band.
+
+    ``glass`` is a float RGBA layer (alpha 0-1) the size of the flat dial image.
+    """
+    h, w = glass.shape[:2]
     mask = np.zeros((h, w), np.float32)
     if rng.random() < 0.5:
         cx, cy = center[0] + rng.uniform(-0.6, 0.6) * radius, center[1] + rng.uniform(-0.6, 0.6) * radius
@@ -103,14 +116,14 @@ def add_glare(rng: np.random.Generator, dial: np.ndarray, center: Point, radius:
         mask = np.exp(-(dist / (radius * rng.uniform(0.05, 0.25))) ** 2)
     disc = np.zeros((h, w), np.float32)
     cv2.circle(disc, (int(center[0]), int(center[1])), int(radius), 1.0, -1)
-    a = (mask * disc * rng.uniform(0.5, 1.0))[..., None]
+    a = mask * disc * rng.uniform(0.5, 1.0)
     tint = np.array([255, 255, rng.uniform(220, 255)], np.float32)
-    dial[..., :3] = (dial[..., :3] * (1 - a) + tint * a).astype(np.uint8)
+    _over(glass, a, tint)
 
 
-def add_dirt(rng: np.random.Generator, dial: np.ndarray, center: Point, radius: float) -> None:
-    """Dust, smudges and stains on the glass."""
-    h, w = dial.shape[:2]
+def add_dirt(rng: np.random.Generator, glass: np.ndarray, center: Point, radius: float) -> None:
+    """Dust, smudges and stains on the glass (float RGBA layer, see ``add_glare``)."""
+    h, w = glass.shape[:2]
     field_ = cv2.GaussianBlur(rng.normal(0, 1, (h, w)).astype(np.float32), (0, 0), radius * 0.08)
     field_ = (field_ - field_.min()) / max(1e-6, np.ptp(field_))
     a = np.clip((field_ - rng.uniform(0.4, 0.7)) * 2.5, 0, 1) * rng.uniform(0.25, 0.6)
@@ -119,9 +132,8 @@ def add_dirt(rng: np.random.Generator, dial: np.ndarray, center: Point, radius: 
     a = np.clip(a + specks, 0, 0.9)
     disc = np.zeros((h, w), np.float32)
     cv2.circle(disc, (int(center[0]), int(center[1])), int(radius), 1.0, -1)
-    a = (a * disc)[..., None]
     col = np.array([(110, 95, 70), (80, 80, 80), (140, 120, 90)][rng.integers(3)], np.float32)
-    dial[..., :3] = (dial[..., :3] * (1 - a) + col * a).astype(np.uint8)
+    _over(glass, a * disc, col)
 
 
 # ----------------------------------------------------------------- perspective
@@ -134,23 +146,75 @@ def rotation(yaw: float, pitch: float, roll: float) -> np.ndarray:
     return Rz @ Ry @ Rx
 
 
+def project(R: np.ndarray, focal: float, center_px: Point, pts3) -> np.ndarray:
+    """Pinhole projection of gauge-frame points (x right, y down, z into the wall).
+
+    The gauge frame is centred on the dial, in the same pixel units as ``focal``;
+    the gauge front (bezel and glass) is the plane z = 0.
+    """
+    P = np.asarray(pts3, np.float64).reshape(-1, 3) @ R.T + np.array([0.0, 0.0, focal])
+    return focal * P[:, :2] / P[:, 2:3] + np.asarray(center_px, np.float64)
+
+
 def camera_homography(src_size: int, diameter: float, yaw: float, pitch: float, roll: float,
-                      focal: float, center_px: Point) -> np.ndarray:
+                      focal: float, center_px: Point, z: float = 0.0) -> np.ndarray:
     """Homography from the flat dial image to the camera image.
 
     The dial (``src_size`` px square, gauge spanning it) is a plane of physical
     width ``diameter`` px at distance ``focal``, rotated by yaw/pitch/roll, and
-    its centre projects to ``center_px``.
+    the gauge front centre projects to ``center_px``. ``z`` moves the plane
+    behind the front (e.g. the recessed face under the glass).
     """
     R = rotation(yaw, pitch, roll)
     half = src_size / 2.0
     s = diameter / src_size
     src = np.array([[0, 0], [src_size, 0], [src_size, src_size], [0, src_size]], np.float32)
-    dst = []
-    for x, y in src:
-        P = R @ np.array([(x - half) * s, (y - half) * s, 0.0]) + np.array([0, 0, focal])
-        dst.append([focal * P[0] / P[2] + center_px[0], focal * P[1] / P[2] + center_px[1]])
-    return cv2.getPerspectiveTransform(src, np.array(dst, np.float32))
+    pts3 = [[(x - half) * s, (y - half) * s, z] for x, y in src]
+    dst = project(R, focal, center_px, pts3)
+    return cv2.getPerspectiveTransform(src, dst.astype(np.float32))
+
+
+def draw_case_wall(size: int, R: np.ndarray, focal: float, center_px: Point, radius: float,
+                   depth: float, color, rng: np.random.Generator, n: int = 96,
+                   ss: int = 2) -> tuple[np.ndarray, np.ndarray]:
+    """Render the cylindrical side wall of the case (radius/depth in gauge-frame px).
+
+    Only wall segments facing the camera are drawn, far ones first, shaded by a
+    light from above. Drawn ``ss`` times larger and downsampled, so edges are
+    smooth and segments leave no seams. Returns (RGB float32, alpha float32).
+    """
+    S = size * ss
+    rgb = np.zeros((S, S, 3), np.float32)
+    mask = np.zeros((S, S), np.float32)
+    if depth > 0:
+        t = np.linspace(0, 2 * math.pi, n + 1)
+        ring = np.stack([radius * np.cos(t), radius * np.sin(t)], 1)
+        cpx = (center_px[0] * ss, center_px[1] * ss)
+        front = project(R, focal * ss, cpx, np.c_[ring * ss, np.zeros(n + 1)])
+        back = project(R, focal * ss, cpx, np.c_[ring * ss, np.full(n + 1, depth * ss)])
+        light = np.array([rng.uniform(-0.5, 0.5), -1.0, -0.6])
+        light /= np.linalg.norm(light)
+        base = np.asarray(color, np.float32)
+        quads = []
+        for i in range(n):
+            tm = (t[i] + t[i + 1]) / 2
+            normal = R @ np.array([math.cos(tm), math.sin(tm), 0.0])
+            mid = R @ np.array([radius * math.cos(tm), radius * math.sin(tm), depth / 2])
+            mid = mid + np.array([0.0, 0.0, focal])
+            if normal @ mid >= 0:          # facing away from the camera
+                continue
+            lit = max(0.0, -float(normal @ light))
+            col = np.clip(base * (0.35 + 0.75 * lit) + 255 * 0.4 * lit ** 12, 0, 255)
+            poly = np.array([front[i], front[i + 1], back[i + 1], back[i]])
+            quads.append((mid[2], poly, col))
+        for _, poly, col in sorted(quads, key=lambda q: -q[0]):
+            pts = np.round(poly).astype(np.int32)
+            cv2.fillConvexPoly(rgb, pts, tuple(float(c) for c in col))
+            cv2.fillConvexPoly(mask, pts, 1.0)
+    if ss > 1:
+        rgb = cv2.resize(rgb, (size, size), interpolation=cv2.INTER_AREA)
+        mask = cv2.resize(mask, (size, size), interpolation=cv2.INTER_AREA)
+    return rgb, mask
 
 
 def apply_h(H: np.ndarray, pts) -> np.ndarray:
@@ -234,23 +298,46 @@ class Sample:
     camera: dict = field(default_factory=dict)
 
 
+def _disc(size: int, center: Point, radius: float, ss: int = 4) -> np.ndarray:
+    """Anti-aliased filled disc mask (float32 0-1)."""
+    m = np.zeros((size * ss, size * ss), np.float32)
+    cv2.circle(m, (int(round(center[0] * ss)), int(round(center[1] * ss))), int(round(radius * ss)),
+               1.0, -1)
+    return cv2.resize(m, (size, size), interpolation=cv2.INTER_AREA)
+
+
+def _warp(layer: np.ndarray, H: np.ndarray, size: int) -> np.ndarray:
+    return cv2.warpPerspective(layer, H, (size, size), flags=cv2.INTER_LINEAR,
+                               borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+
 def make_sample(rng: np.random.Generator, cfg: dict, bg_paths: list[str] | None = None) -> Sample:
+    """One labelled image.
+
+    The gauge is a short cylinder: bezel and glass at the front (z = 0), the
+    printed face recessed behind the glass (z = recess) and the case wall going
+    back to z = depth. At oblique views the wall shows and the face shifts
+    against the bezel (parallax). Keypoints and the homography refer to the face.
+    """
     size = int(cfg.get("image_size", 640))
     cam = cfg.get("camera", {})
     npp = cfg.get("nuclear_conditions", {})
+    case = cfg.get("case", {})
 
     spec = sample_spec(rng, cfg)
     value = sample_value(rng, spec)
     dial_size = 512
     r: DialRender = render_dial(spec, value, size=dial_size, rng=rng)
-    dial = np.array(r.image)  # RGBA
+    dial = np.array(r.image).astype(np.float32)  # RGBA
+    dial[..., 3] /= 255.0
 
     conditions = []
+    glass = np.zeros((dial_size, dial_size, 4), np.float32)
     if rng.random() < npp.get("dirt_prob", 0.2):
-        add_dirt(rng, dial, r.center, r.face_radius)
+        add_dirt(rng, glass, r.center, r.face_radius)
         conditions.append("dirt")
     if rng.random() < npp.get("glare_prob", 0.3):
-        add_glare(rng, dial, r.center, r.face_radius)
+        add_glare(rng, glass, r.center, r.face_radius)
         conditions.append("glare")
 
     yaw = rng.uniform(*cam.get("yaw_deg", [-50, 50]))
@@ -258,23 +345,31 @@ def make_sample(rng: np.random.Generator, cfg: dict, bg_paths: list[str] | None 
     roll = rng.uniform(*cam.get("roll_deg", [-15, 15]))
     diameter = rng.uniform(*cam.get("scale", [0.25, 0.9])) * size
     focal = rng.uniform(*cam.get("focal", [0.8, 2.5])) * size
+    depth_frac = rng.uniform(*case.get("depth", [0.15, 0.5]))      # / gauge diameter
+    recess_frac = rng.uniform(*case.get("recess", [0.02, 0.08]))   # / gauge diameter
+    R = rotation(yaw, pitch, roll)
 
-    # Place the gauge so its whole case stays in the frame.
-    rim = [(r.center[0] + r.outer_radius * math.cos(t), r.center[1] + r.outer_radius * math.sin(t))
-           for t in np.linspace(0, 2 * math.pi, 48, endpoint=False)]
-    H0 = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (0.0, 0.0))
-    pr = apply_h(H0, rim)
-    lo, hi = pr.min(0), pr.max(0)
-    span = hi - lo
+    # Place the gauge so its whole case (front rim and back rim) stays in the frame.
+    t = np.linspace(0, 2 * math.pi, 48, endpoint=False)
+    ring = np.stack([np.cos(t), np.sin(t)], 1) * 0.5  # unit-diameter circle
+
+    def rims(d: float, c: Point) -> np.ndarray:
+        rr = ring * d * (r.outer_radius * 2 / dial_size)
+        return np.r_[project(R, focal, c, np.c_[rr, np.zeros(len(t))]),
+                     project(R, focal, c, np.c_[rr, np.full(len(t), depth_frac * d)])]
+
+    pr = rims(diameter, (0.0, 0.0))
+    span = pr.max(0) - pr.min(0)
     if (span > size * 0.98).any():  # too big after projection: shrink
-        k = (size * 0.98) / span.max()
-        diameter *= k
-        H0 = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (0.0, 0.0))
-        pr = apply_h(H0, rim)
-        lo, hi = pr.min(0), pr.max(0)
+        diameter *= (size * 0.98) / span.max()
+        pr = rims(diameter, (0.0, 0.0))
+    lo, hi = pr.min(0), pr.max(0)
     cx = rng.uniform(-lo[0] + 1, size - hi[0] - 1)
     cy = rng.uniform(-lo[1] + 1, size - hi[1] - 1)
-    H = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (cx, cy))
+    depth, recess = depth_frac * diameter, recess_frac * diameter
+    H_front = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (cx, cy))
+    H = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (cx, cy), z=recess)
+    H_mid = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (cx, cy), z=depth / 2)
 
     bg = load_background(rng, size, bg_paths or [])
 
@@ -283,18 +378,42 @@ def make_sample(rng: np.random.Generator, cfg: dict, bg_paths: list[str] | None 
         stem_w = r.outer_radius * rng.uniform(0.15, 0.3)
         stem_pts = [(r.center[0] - stem_w, r.center[1]), (r.center[0] + stem_w, r.center[1]),
                     (r.center[0] + stem_w, dial_size * 1.6), (r.center[0] - stem_w, dial_size * 1.6)]
-        sp = apply_h(H, stem_pts).astype(np.int32)
+        sp = apply_h(H_mid, stem_pts).astype(np.int32)
         col = [(180, 160, 90), (170, 170, 175), (120, 120, 120)][rng.integers(3)]
         cv2.fillConvexPoly(bg, sp, col)
 
-    warped = cv2.warpPerspective(dial, H, (size, size), flags=cv2.INTER_LINEAR,
-                                 borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    # Split the flat render into the face (recessed) and the bezel (front).
+    face_m = _disc(dial_size, r.center, r.face_radius)
+    face = dial.copy()
+    face[..., 3] *= face_m
+    bezel = dial.copy()
+    bezel[..., 3] *= 1 - face_m
+    lip_col = np.clip(np.array(spec.bezel_color, np.float32) * 0.35, 0, 255)
+    lip = np.dstack([np.broadcast_to(lip_col, (dial_size, dial_size, 3)), face_m * dial[..., 3]])
+
+    phys_r = r.outer_radius * diameter / dial_size
+    wall_col = np.array(spec.bezel_color, np.float32) * rng.uniform(0.6, 0.95)
+    wall_rgb, wall_a = draw_case_wall(size, R, focal, (cx, cy), phys_r, depth, wall_col, rng)
+    w_bezel, w_lip = (_warp(x, H_front, size) for x in (bezel, lip))
+    w_face = _warp(face, H, size)
+    w_glass = _warp(glass, H_front, size)
+
     # Contact shadow of the case.
-    alpha = warped[..., 3:4].astype(np.float32) / 255.0
-    sh = cv2.GaussianBlur(alpha[..., 0], (0, 0), max(1.0, diameter * 0.03))
+    front_a = np.maximum(w_bezel[..., 3], w_lip[..., 3])
+    alpha = np.maximum(front_a, wall_a)
+    sh = cv2.GaussianBlur(alpha, (0, 0), max(1.0, diameter * 0.03))
     sh = np.roll(sh, (int(diameter * 0.02), int(diameter * 0.02)), axis=(0, 1))
     img = bg.astype(np.float32) * (1 - 0.45 * sh[..., None])
-    img = img * (1 - alpha) + warped[..., :3].astype(np.float32) * alpha
+
+    def over(rgb, a):
+        nonlocal img
+        img = img * (1 - a[..., None]) + rgb * a[..., None]
+
+    over(wall_rgb, wall_a)
+    over(w_lip[..., :3], w_lip[..., 3])              # inner wall seen through the opening
+    over(w_face[..., :3], w_face[..., 3] * w_lip[..., 3])  # face only inside the opening
+    over(w_bezel[..., :3], w_bezel[..., 3])
+    over(w_glass[..., :3], w_glass[..., 3])
 
     # Global brightness / contrast jitter (always on, mild).
     img = (img - 128) * rng.uniform(0.8, 1.2) + 128 + rng.uniform(-20, 20)
@@ -317,10 +436,10 @@ def make_sample(rng: np.random.Generator, cfg: dict, bg_paths: list[str] | None 
     names = ["center", "tip", "scale_min", "scale_max"]
     dial_kp = dict(zip(names, [r.center, r.tip, r.scale_min, r.scale_max]))
     img_kp = {k: tuple(map(float, v)) for k, v in zip(names, apply_h(H, list(dial_kp.values())))}
-    pr = apply_h(H, rim)
+    pr = rims(diameter, (cx, cy))
     bbox = (float(max(0, pr[:, 0].min())), float(max(0, pr[:, 1].min())),
             float(min(size, pr[:, 0].max())), float(min(size, pr[:, 1].max())))
     return Sample(image=img, value=value, spec=spec, keypoints=img_kp, bbox=bbox, homography=H,
                   dial_keypoints=dial_kp, dial_size=dial_size, conditions=conditions,
                   camera={"yaw": yaw, "pitch": pitch, "roll": roll, "focal": focal,
-                          "diameter": diameter})
+                          "diameter": diameter, "case_depth": depth, "face_recess": recess})

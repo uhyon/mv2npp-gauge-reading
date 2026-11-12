@@ -11,7 +11,7 @@ python scripts/generate_synth.py --num 24 --preview preview.jpg          # conta
 python scripts/generate_synth.py --out data/synthetic/synth_2d           # full set (20,000 by default)
 ```
 
-About 18 images/s on 4 CPU cores (640 px), so 20,000 images take about 20 minutes.
+About 13 images/s on 4 CPU cores (640 px), so 20,000 images take about 25-30 minutes.
 Image `i` uses seed `seed + i`, so any single image can be regenerated.
 
 ## What is randomized
@@ -21,12 +21,15 @@ Image `i` uses seed `seed + i`, so any single image can be regenerated.
 | Scale | 20 ranges (0-1 to 0-400, vacuum and compound ranges, -20-60), 7 units, sweep 180-270 deg, 4-10 major intervals with "nice" steps, 2/4/5/10 minor divisions |
 | Dial design | face/ink palette (incl. black face), font (from `assets/fonts` or system fonts), tick length/width, labels inside or outside the ticks, red/green zones, brand text, inner second scale (bar/psi) |
 | Needle | taper, line or arrow; length, tail, hub size, colour; soft shadow |
-| Case | bezel width and colour (steel, black, brass), contact shadow, stem/process connection |
+| Case | bezel width and colour (steel, black, brass), 3D side wall (depth 0.15-0.5 x diameter), face recessed 0.02-0.08 x diameter behind the glass (parallax against the bezel), contact shadow, stem/process connection |
 | Camera | yaw ±50, pitch ±40, roll ±15 deg, focal 0.8-2.5 x image size, gauge diameter 0.25-0.9 x image size; the case always stays inside the frame |
 | Background | photos from `assets/backgrounds` (70%) or procedural walls, pipes, panels and grime |
 | NPP conditions | low light (dim + torch spot + amplified shot/read noise), glass glare (spot or window band), motion blur, defocus, radiation speckle (hot pixels, blobs, short streaks), dirt on the glass, JPEG 35-95 |
 
-Glare and dirt are drawn on the dial before the perspective warp, so they sit on the glass.
+The gauge is a short cylinder: bezel and glass at the front, the printed face recessed behind them,
+the case wall going back. Each layer is warped with the homography of its own plane, so at oblique
+views the wall shows and the face shifts against the bezel. Glare and dirt are drawn on the glass
+plane. Keypoints and `homography` refer to the face plane.
 The applied conditions are recorded per image, so results can be split by condition.
 
 ## Labels
@@ -44,7 +47,6 @@ reading them with `read_value` gives the true value exactly.
 
 ## Known gaps (next)
 
-- The case is a flat disc: no visible side wall or glass thickness at oblique angles.
 - Non-linear scales (e.g. square-root flow dials) and multi-turn dials are not generated.
 - No real plant background photos are bundled; add own or CC0 photos to `assets/backgrounds/`.
 - Unit and range are paired at random, so some pairs are unrealistic (e.g. -20-60 MPa).
