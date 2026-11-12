@@ -41,3 +41,10 @@ def test_hit_rate_by_group_separates_point_tol():
     pt = [{"units": ["psi"], "interval": [2100.0, 2100.0], "point": True}]
     rows = [("interval", 3.05, "bar", DUAL), ("interval", 9.0, "bar", DUAL), ("point_tol", 2100.0, "psi", pt)]
     assert hit_rate_by_group(rows) == {"interval": (0.5, 2), "point_tol": (1.0, 1)}
+
+
+def test_reversed_interval_still_hits():
+    # Some MeasureBench labels list the interval high-to-low.
+    alts = [{"units": ["°C"], "interval": [32.0, 30.0], "point": False}]
+    assert interval_hit(31.0, "°C", alts)
+    assert not interval_hit(33.0, "°C", alts)

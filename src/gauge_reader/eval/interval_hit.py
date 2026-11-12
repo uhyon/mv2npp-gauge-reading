@@ -14,7 +14,7 @@ from gauge_reader.units import same_unit
 
 
 def _widen(alt: dict, point_tol: float) -> tuple[float, float]:
-    lo, hi = alt["interval"]
+    lo, hi = sorted(alt["interval"])  # labels.csv files built before the sort may be reversed
     if alt.get("point") and point_tol > 0:
         pad = abs(lo) * point_tol
         return lo - pad, hi + pad

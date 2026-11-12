@@ -104,6 +104,12 @@ def main(argv=None) -> None:
     head = f"# {a.dataset}: {a.pred or 'baseline ' + a.baseline}\n\n{len(samples)} images"
     if a.dataset == "meterfl":
         head += f", {corrected} with hand corrections" if corrected else ", raw labels"
+    if a.baseline == "oracle":  # the oracle must score perfectly; list anything that does not
+        bad = [r for r in rows if r.hit is False or (r.fs_error or 0) > 1e-9]
+        text += f"\n\noracle misses: {len(bad)}"
+        for r in bad:
+            text += (f"\n- {r.sample.id} ({r.sample.subset}): pred {r.pred.value:g} {r.pred.unit}, "
+                     f"fs {r.fs_error}, alternatives {json.dumps(r.sample.alternatives, ensure_ascii=False)}")
     print(head + "\n\n" + text)
     if a.out:
         a.out.mkdir(parents=True, exist_ok=True)
