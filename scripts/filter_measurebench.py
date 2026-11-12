@@ -39,6 +39,7 @@ EXCLUDE_IDS = {
     "pressure_gauge_45": "two gauges with two needles each; answer is the left gauge's black needle",
     "pressure_gauge_65": "two gauges with two needles each; answer is the left gauge's black needle",
     "pressure_gauge_49": "three same-range gauges whose needles differ by 2-3% FS",
+    "pressure_gauge_30": "no unit on the dial; needle at 70 but the answer is 2-5 (checked 2026-11-12)",
 }
 
 # Kept but marked in the flags column, so results can be shown with and without them.

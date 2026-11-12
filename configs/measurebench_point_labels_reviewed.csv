@@ -44,3 +44,4 @@ thermometer_8,data/processed/measurebench_dial/images/thermometer_8.png,°C,30,-
 thermometer_19,data/processed/measurebench_dial/images/thermometer_19.png,degree celsius,120,20,120,5,라벨은 40부터이나 눈금은 20부터임
 thermometer_20,data/processed/measurebench_dial/images/thermometer_20.png,degree celsius,120,20,120,1,작은 눈금 간격 1로 수정 GT=120은 맞음
 thermometer_24,data/processed/measurebench_dial/images/thermometer_24.png,degree celsius,30,20,120,5,"숫자 라벨 최대 100, 마지막 눈금 120(세어서 정함)"
+thermometer_34,data/processed/measurebench_dial/images/thermometer_34.png,°C,75,20,120,5,"단위 누락 → 문자판 WATER TEMP °C로 채움. thermometer_24와 같은 GReddy 계기, 범위·눈금은 24번 기준"
