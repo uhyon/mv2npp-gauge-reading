@@ -300,9 +300,8 @@ class Sample:
 
 def _disc(size: int, center: Point, radius: float, ss: int = 4) -> np.ndarray:
     """Anti-aliased filled disc mask (float32 0-1)."""
-    cv2.circle(m, (round(center[0] * ss), round(center[1] * ss)), round(radius * ss),
-    cv2.circle(m, (int(round(center[0] * ss)), int(round(center[1] * ss))), int(round(radius * ss)),
-               1.0, -1)
+    m = np.zeros((size * ss, size * ss), np.float32)
+    cv2.circle(m, (round(center[0] * ss), round(center[1] * ss)), round(radius * ss), 1.0, -1)
     return cv2.resize(m, (size, size), interpolation=cv2.INTER_AREA)
 
 
