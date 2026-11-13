@@ -25,8 +25,9 @@ Thumbs.db
 .idea/
 .env
 
-# Downloaded background photos (credits stay in ATTRIBUTION.csv, also not committed)
+# Downloaded background photos are not committed; their credit list ATTRIBUTION.csv is
 assets/backgrounds/*
 assets/backgrounds_review/
 assets/backgrounds_scan/
 !assets/backgrounds/.gitkeep
+!assets/backgrounds/ATTRIBUTION.csv
