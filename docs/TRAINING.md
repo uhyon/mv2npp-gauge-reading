@@ -66,12 +66,32 @@ uv run python scripts/predict_readings.py --weights runs/pose/base/weights/best.
 uv run python scripts/evaluate.py score synth --pred runs/pose/base/synth_val_pred.csv --out runs/pose/base/synth_val
 ```
 
-`predict_readings.py` uses the most confident detection per image. Rows without a range in the
+`predict_readings.py` uses the most confident detection per image. Two physical checks keep
+a keypoint failure from turning into a 100x reading error: a scale arc (min to max keypoint)
+under 90° is declined as `bad_geometry` (`--min-sweep`), and the needle fraction is clipped to
+[-0.1, 1.1] (`--clip`, the raw value stays in the `fraction` column). Rows without a range in the
 manifest (most MeasureBench images: only the hand-labelled ones have one) and images with no
 detection are left blank, which `evaluate.py` counts as declined (lower coverage). MeterFL
 images are tight crops, so a grey margin of 15% per side is added first (`--pad`, try 0 to
 compare). Extra columns (keypoints, box and keypoint confidence, needle fraction) are kept for
 error analysis, and `--overlay` draws the predicted keypoints on every image.
+
+## 3. Robustness to field conditions (ER-05)
+
+`scripts/robustness.py` reads the same test set clean and under each degradation of the
+protocol in `docs/DATASETS.md` (low light, radiation speckle, motion blur, severity 1–3, one at
+a time, fixed seed per image; `gauge_reader.eval.degrade`). Degraded images are made in
+memory; the report has one row per setting with the change against clean, plus the model
+time per image on this machine (ER-07):
+
+```bash
+uv run python scripts/robustness.py meterfl --weights runs/pose/base/weights/best.pt --out runs/pose/base/robust_meterfl
+uv run python scripts/robustness.py synth --weights runs/pose/base/weights/best.pt --pad 0 --limit 500 \
+    --out runs/pose/base/robust_synth
+```
+
+`examples.jpg` shows the first images under every setting, for checking only: MeterFL images
+must not be used in demos.
 
 Floor to beat on MeterFL: always reading mid-scale gives 20.7% FS mean error and 3% of
 images within 2% FS.

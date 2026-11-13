@@ -220,16 +220,45 @@ def load_synth(root: Path | str, split: str = "val") -> list[EvalSample]:
     return out
 
 
+# ---------------------------------------------------------------- by name
+
+DEFAULT_PATHS = {"meterfl": Path("data/raw/Meter-FL"),
+                 "measurebench": Path("data/processed/measurebench_dial/labels.csv"),
+                 "synth": Path("data/synthetic/synth_2d")}
+
+
+def load_dataset(name: str, path: Path | str | None = None, *,
+                 corrections: Path | str | None = METERFL_CORRECTIONS, all_types: bool = False,
+                 exclude_barometers: bool = False, exclude_flags: tuple[str, ...] = (),
+                 split: str = "val") -> list[EvalSample]:
+    """meterfl, measurebench or synth, from ``path`` or the default location (repo root)."""
+    if name not in DEFAULT_PATHS:
+        raise ValueError(f"unknown dataset {name!r}, expected one of {sorted(DEFAULT_PATHS)}")
+    path = Path(path) if path else DEFAULT_PATHS[name]
+    if name == "meterfl":
+        return load_meterfl(path, corrections=corrections, pressure_only=not all_types)
+    if name == "synth":
+        return load_synth(path, split=split)
+    return load_measurebench(path, exclude_barometers=exclude_barometers,
+                             exclude_flags=tuple(exclude_flags))
+
+
+def manifest_rows(samples: list[EvalSample]) -> list[dict]:
+    """The rows write_manifest would write, as dicts (for reading without a file)."""
+    return [{"id": s.id, "image": s.image.as_posix(),
+             "scale_min": "" if s.scale_min is None else s.scale_min,
+             "scale_max": "" if s.scale_max is None else s.scale_max,
+             "unit": s.unit, "kind": unit_kind(s.unit) or ""} for s in samples]
+
+
 def write_manifest(samples: list[EvalSample], path: Path | str) -> None:
     """Inference input: one row per image with the known range (blank when unknown).
 
     A model run reads this, fills value (and unit if it predicts one) and saves it as the
     predictions CSV for scripts/evaluate.py.
     """
+    fields = ["id", "image", "scale_min", "scale_max", "unit", "kind", "value", "pred_unit"]
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["id", "image", "scale_min", "scale_max", "unit", "kind", "value", "pred_unit"])
-        for s in samples:
-            w.writerow([s.id, s.image.as_posix(), "" if s.scale_min is None else s.scale_min,
-                        "" if s.scale_max is None else s.scale_max, s.unit,
-                        unit_kind(s.unit) or "", "", ""])
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows({**r, "value": "", "pred_unit": ""} for r in manifest_rows(samples))

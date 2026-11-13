@@ -47,7 +47,7 @@ Each condition is applied at three severities (1 mild, 2 moderate, 3 severe) to 
 | Motion blur | handheld or robot-mounted camera moving | linear kernel 7 / 15 / 25 px, random direction |
 | Glare (optional) | glass cover reflection | elliptical specular blob over 5% / 15% / 25% of the dial |
 
-The same degradations, with randomized parameters, are part of the synthetic training generator, so the test asks whether the model learned them, not whether it has seen these exact images.
+The same degradations, with randomized parameters, are part of the synthetic training generator, so the test asks whether the model learned them, not whether it has seen these exact images. Implemented in `gauge_reader.eval.degrade` (shot noise: 400 photons for a white pixel; streaks 2–8 px; blur in px at the image's native resolution) and run with `scripts/robustness.py` (see `docs/TRAINING.md`). Glare is not implemented yet.
 
 ## Limitations
 
