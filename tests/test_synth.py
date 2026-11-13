@@ -94,6 +94,6 @@ def test_background_photo_recorded(tmp_path):
     for i in range(2):
         cv2.imwrite(str(tmp_path / f"bg{i}.jpg"), np.full((200, 300, 3), 60 * i, np.uint8))
     paths = sorted(str(p) for p in tmp_path.glob("*.jpg"))
-    got = {make_sample(np.random.default_rng(s), CFG, paths).background for s in range(12)}
+    got = {make_sample(np.random.default_rng(s), CFG, paths).background for s in range(40)}
     assert None in got and got - {None} <= set(paths) and got - {None}
     assert make_sample(np.random.default_rng(0), CFG).background is None
