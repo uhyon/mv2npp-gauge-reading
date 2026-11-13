@@ -62,17 +62,19 @@ def procedural_background(rng: np.random.Generator, size: int) -> np.ndarray:
 
 
 def load_background(rng: np.random.Generator, size: int, bg_paths: list[str],
-                    photo_prob: float = 0.7) -> np.ndarray:
+                    photo_prob: float = 0.7) -> tuple[np.ndarray, str | None]:
+    """Background image and the photo it was cropped from (None for procedural)."""
     if bg_paths and rng.random() < photo_prob:
-        img = cv2.imread(bg_paths[rng.integers(len(bg_paths))], cv2.IMREAD_COLOR)
+        path = bg_paths[rng.integers(len(bg_paths))]
+        img = cv2.imread(path, cv2.IMREAD_COLOR)
         if img is not None:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w = img.shape[:2]
             s = rng.uniform(0.3, 1.0) * min(h, w)
             x, y = rng.uniform(0, w - s), rng.uniform(0, h - s)
             crop = img[int(y):int(y + s), int(x):int(x + s)]
-            return cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA)
-    return procedural_background(rng, size)
+            return cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA), path
+    return procedural_background(rng, size), None
 
 
 def list_backgrounds(bg_dir: str | None) -> list[str]:
@@ -296,6 +298,7 @@ class Sample:
     dial_size: int
     conditions: list[str] = field(default_factory=list)
     camera: dict = field(default_factory=dict)
+    background: str | None = None     # background photo path, None for procedural
 
 
 def _disc(size: int, center: Point, radius: float, ss: int = 4) -> np.ndarray:
@@ -370,7 +373,7 @@ def make_sample(rng: np.random.Generator, cfg: dict, bg_paths: list[str] | None 
     H = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (cx, cy), z=recess)
     H_mid = camera_homography(dial_size, diameter, yaw, pitch, roll, focal, (cx, cy), z=depth / 2)
 
-    bg = load_background(rng, size, bg_paths or [])
+    bg, bg_path = load_background(rng, size, bg_paths or [])
 
     # Stem / process connection below (or behind) the case.
     if rng.random() < 0.6:
@@ -441,4 +444,5 @@ def make_sample(rng: np.random.Generator, cfg: dict, bg_paths: list[str] | None 
     return Sample(image=img, value=value, spec=spec, keypoints=img_kp, bbox=bbox, homography=H,
                   dial_keypoints=dial_kp, dial_size=dial_size, conditions=conditions,
                   camera={"yaw": yaw, "pitch": pitch, "roll": roll, "focal": focal,
-                          "diameter": diameter, "case_depth": depth, "face_recess": recess})
+                          "diameter": diameter, "case_depth": depth, "face_recess": recess},
+                  background=bg_path)

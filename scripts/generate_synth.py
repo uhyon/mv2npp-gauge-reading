@@ -3,6 +3,9 @@
     python scripts/generate_synth.py --config configs/synth_2d.yaml --out data/synthetic/synth_2d
     python scripts/generate_synth.py --num 200 --out data/synthetic/try    # quick look
     python scripts/generate_synth.py --num 24 --preview preview.jpg        # contact sheet only
+    python scripts/generate_synth.py --backfill-backgrounds --out data/synthetic/synth_2d
+        # add the "background" field to a labels.jsonl written before it was recorded
+        # (re-renders every image from its seed in memory; writes no images)
 
 Output layout (one folder per split, YOLO-pose compatible):
 
@@ -61,6 +64,7 @@ def label_record(i: int, split: str, s) -> dict:
         "dial_size": s.dial_size,
         "conditions": s.conditions,
         "camera": {k: round(float(v), 3) for k, v in s.camera.items()},
+        "background": os.path.basename(s.background) if s.background else None,
         "style": {"needle": sp.needle_style, "face": list(sp.face_color),
                   "font": os.path.basename(sp.font_path) if sp.font_path else None},
     }
@@ -85,6 +89,46 @@ def _work(args):
     with open(os.path.join(out, "labels", split, f"{i:06d}.txt"), "w") as f:
         f.write(yolo_line(s, size) + "\n")
     return label_record(i, split, s)
+
+
+def _background_of(i: int) -> str | None:
+    s = sample_for(i, _CFG, _BGS)
+    return os.path.basename(s.background) if s.background else None
+
+
+def backfill_backgrounds(cfg, bgs, out: str, workers: int) -> None:
+    """Fill ``background`` in an existing labels.jsonl by replaying each image's seed.
+
+    Needs the same config and background folder as the original run; the first images are
+    re-rendered and compared with the stored JPEGs to catch a changed setup.
+    """
+    path = os.path.join(out, "labels.jsonl")
+    with open(path, encoding="utf-8") as f:
+        recs = [json.loads(line) for line in f if line.strip()]
+    ids = [int(r["id"]) for r in recs]
+    _init(cfg, bgs)
+    for r in recs[:3]:  # the replay must reproduce the stored images, background included
+        img = cv2.imread(os.path.join(out, r["file"]), cv2.IMREAD_COLOR)
+        regen = sample_for(int(r["id"]), cfg, bgs).image[..., ::-1]
+        if img is None or img.shape != regen.shape or \
+                np.abs(img.astype(np.int16) - regen).mean() > 4:
+            raise SystemExit(f"image {r['id']} does not match its replay: config, generator "
+                             "code or background folder differ from the original run")
+    print(f"replaying {len(ids)} images with {workers} workers")
+    if workers > 1:
+        with Pool(workers, initializer=_init, initargs=(cfg, bgs)) as pool:
+            names = pool.map(_background_of, ids, chunksize=32)
+    else:
+        names = [_background_of(i) for i in ids]
+    for r, n in zip(recs, names):
+        r["background"] = n
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in recs)
+    os.replace(tmp, path)
+    used = {n for n in names if n}
+    print(f"done: {sum(n is not None for n in names)} photo backgrounds "
+          f"({len(used)} distinct photos), {names.count(None)} procedural")
 
 
 def draw_labels(img: np.ndarray, s) -> np.ndarray:
@@ -129,12 +173,18 @@ def main():
     ap.add_argument("--preview", help="write a contact sheet to this path and exit")
     ap.add_argument("--no-annotate", action="store_true", help="preview without label overlay")
     ap.add_argument("--start", type=int, default=0, help="first image index (preview)")
+    ap.add_argument("--backfill-backgrounds", action="store_true",
+                    help="add the background field to an existing <out>/labels.jsonl and exit")
     args = ap.parse_args()
 
     with open(args.config, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     bgs = list_backgrounds(cfg.get("backgrounds_dir"))
     n = args.num or int(cfg.get("num_images", 1000))
+
+    if args.backfill_backgrounds:
+        backfill_backgrounds(cfg, bgs, args.out, args.workers)
+        return
 
     if args.preview:
         preview(cfg, bgs, n if args.num else 24, args.preview, not args.no_annotate, args.start)

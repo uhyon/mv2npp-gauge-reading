@@ -7,7 +7,7 @@ temperature and differential-pressure gauges by eye. This project builds an end-
 that reads a gauge from a photo, flags out-of-range values, and asks for a retake when unsure,
 for patrol robots, drones or a phone in an operator's hand.
 
-> Status: phase 2 (synthetic generator), 2026-11-11. Target: portfolio-ready demo by 2026-11-26.
+> Status: phase 3 (baseline training and first evaluation), 2026-11-13. Target: portfolio-ready demo by 2026-11-26.
 
 ## Pipeline
 
@@ -27,7 +27,7 @@ speckle noise and motion blur to those images. See [docs/DATASETS.md](docs/DATAS
 
 ![Synthetic samples](docs/img/synth_samples.jpg)
 
-Synthetic generator: [docs/SYNTHETIC.md](docs/SYNTHETIC.md).
+Synthetic generator: [docs/SYNTHETIC.md](docs/SYNTHETIC.md). Training and evaluation: [docs/TRAINING.md](docs/TRAINING.md).
 
 **Limitation:** no photos of actual nuclear power plant gauges are in the evaluation. NPP field
 conditions are approximated by synthetic degradation.

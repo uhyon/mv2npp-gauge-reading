@@ -55,7 +55,7 @@ The same degradations, with randomized parameters, are part of the synthetic tra
 - The main reading test set (MeterFL) is dial crops, so end-to-end performance including detection is only measured separately on Roboflow obaw9.
 - MeterFL ranges are partly VLM-verified, and 1,306 of its images have unrecorded sources.
 - MeterFL hand check (2026-11-11, `scripts/meterfl_range_check.py`, seed 0, 30 of the 262 pressure gauges stratified by client): **range and unit correct on 30 of 30**. Reading GT off on 3 of 30 by 0.4–1.0% FS (voc_new_444 0.035 → 0.036, voc_new_170 6.1 → 6.2, voc_new_337 1.11 → 1.10, the last from parallax on an oblique photo); one unit typo (`magepascals`). Corrections are in `configs/meterfl_corrections.csv` and must be applied when loading. The unchecked labels likely carry similar noise of up to about 1% FS, which is half of the 2% FS target: report it with the results. Unit spellings are normalized by `gauge_reader.units` (plurals such as `megapascals`, typos `magepascals`, `megapascasl`).
-- MeterFL test diversity is low: the 262 pressure gauges use only 19 scale/unit combinations, and five cover 246 of them (0–0.1 MPa 123, 0–25 MPa 48, 0–1.6 MPa 37, 0–1.6 kPa 23, 0–10 MPa 15). Many images show the same gauge model, so also report % FS per range group.
+- MeterFL test diversity is low: the 262 pressure gauges use only 18 scale/unit combinations once unit typos such as `megapascasl` are merged, and five cover 247 of them (0–0.1 MPa 123, 0–25 MPa 48, 0–1.6 MPa 37, 0–1.6 kPa 23, 0–10 MPa 16). Many images show the same gauge model, so also report % FS per range group.
 
 ## Datasets
 
