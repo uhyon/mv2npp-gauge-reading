@@ -40,7 +40,10 @@ Keypoints follow `gauge_reader.reading.geometry`: `center`, `tip` (needle tip), 
 - `labels/{train,val}/*.txt`: YOLO pose, `0 cx cy w h` + 4 x `(x y v)`, normalized. `data.yaml`
   has `kpt_shape: [4, 3]`. Train with `fliplr=0`: a mirrored dial reads counter-clockwise.
 - `labels.jsonl`: value, range, unit, sweep, steps, image and flat-dial keypoints, bounding box,
-  the 3x3 dial-to-image homography (target for the rectification stage), conditions, camera pose, style.
+  the 3x3 dial-to-image homography (target for the rectification stage), conditions, camera pose, style,
+  and `background` (file name of the background photo, `null` for procedural). For a set generated
+  before this field existed, `generate_synth.py --backfill-backgrounds --out <set>` adds it by
+  replaying each seed (same config and background folder needed; no images are written).
 
 `tests/test_synth.py` checks that mapping the image keypoints back through the homography and
 reading them with `read_value` gives the true value exactly.

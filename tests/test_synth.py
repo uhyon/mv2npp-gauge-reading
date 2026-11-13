@@ -87,3 +87,13 @@ def test_case_wall_extends_bbox_at_oblique_view():
     back = dict(zip(deep.keypoints, apply_h(Hinv, list(deep.keypoints.values()))))
     sp = deep.spec
     assert read_value(kp(back), sp.min_value, sp.max_value) == pytest.approx(deep.value, abs=1e-6)
+
+
+def test_background_photo_recorded(tmp_path):
+    import cv2
+    for i in range(2):
+        cv2.imwrite(str(tmp_path / f"bg{i}.jpg"), np.full((200, 300, 3), 60 * i, np.uint8))
+    paths = sorted(str(p) for p in tmp_path.glob("*.jpg"))
+    got = {make_sample(np.random.default_rng(s), CFG, paths).background for s in range(12)}
+    assert None in got and got - {None} <= set(paths) and got - {None}
+    assert make_sample(np.random.default_rng(0), CFG).background is None
