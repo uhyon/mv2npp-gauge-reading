@@ -1,4 +1,4 @@
-"""Loaders for the reading test sets (MeterFL, MeasureBench) as one sample type.
+"""Loaders for the reading test sets (MeterFL, MeasureBench, synthetic val) as one sample type.
 
 Both loaders return ``EvalSample`` lists, so the same scoring code
 (``gauge_reader.eval.report``) works on either set:
@@ -7,12 +7,16 @@ Both loaders return ``EvalSample`` lists, so the same scoring code
   Hand corrections from ``configs/meterfl_corrections.csv`` are applied on load.
 - MeasureBench: ``alternatives`` holds the accepted interval per scale, so interval hit
   rate is the metric; % FS is added for the hand-labelled samples that have a range.
+- Synthetic (``load_synth``): the held-out split of a generated set, exact labels. Its % FS
+  next to MeterFL's shows the gap between synthetic and real images. Flags are the field
+  conditions; extra groups are face tilt and gauge size.
 """
 
 from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -57,6 +61,7 @@ class EvalSample:
     tol_method: str = ""               # MeasureBench: interval / converted / minor_div / point_tol
     flags: list[str] = field(default_factory=list)
     corrected: list[str] = field(default_factory=list)  # fields changed by hand corrections
+    groups: dict[str, str] = field(default_factory=dict)  # extra breakdowns, e.g. {"tilt": "20–40°"}
 
     @property
     def group(self) -> str:
@@ -156,6 +161,62 @@ def load_measurebench(labels: Path | str, exclude_barometers: bool = False,
                 scale_max=_float(row.get("scale_max")), reading=reading, alternatives=alts,
                 subset=row.get("subtype") or row.get("image_type", ""),
                 tol_method=row.get("tol_method", ""), flags=flags))
+    return out
+
+
+# ------------------------------------------------------------------ synthetic
+
+TILT_BINS = [(0, 20, "0–20°"), (20, 40, "20–40°"), (40, 91, "40°+")]
+SIZE_BINS = [(0, 200, "0–200 px"), (200, 400, "200–400 px"), (400, 1e9, "400+ px")]
+
+
+def _bin(x: float, bins) -> str:
+    for lo, hi, name in bins:
+        if lo <= x < hi:
+            return name
+    return "-"
+
+
+def face_tilt(yaw_deg: float, pitch_deg: float) -> float:
+    """Angle in degrees between the dial face normal and the camera axis.
+
+    The generator rotates the gauge by Rz(roll) Ry(yaw) Rx(pitch); roll turns the face in
+    its own plane, so the tilt is acos(cos yaw * cos pitch).
+    """
+    c = math.cos(math.radians(yaw_deg)) * math.cos(math.radians(pitch_deg))
+    return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+
+def load_synth(root: Path | str, split: str = "val") -> list[EvalSample]:
+    """One split of a generated set (``scripts/generate_synth.py``), from its labels.jsonl.
+
+    reading = the true value, range = the dial range, flags = field conditions (empty for a
+    clean image), subset = needle style. Extra groups: ``tilt`` (face tilt bins) and ``size``
+    (longer side of the gauge box in px).
+    """
+    root = Path(root)
+    path = root / "labels.jsonl"
+    if not path.exists():
+        raise FileNotFoundError(f"no labels.jsonl in {root}")
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if split and r.get("split") != split:
+                continue
+            cam = r.get("camera", {})
+            x0, y0, x1, y1 = r["bbox_xyxy"]
+            out.append(EvalSample(
+                id=f"synth_{r['id']}", dataset="synth", image=root / r["file"], unit=r["unit"],
+                scale_min=float(r["min_value"]), scale_max=float(r["max_value"]),
+                reading=float(r["value"]), subset=(r.get("style") or {}).get("needle") or "",
+                flags=list(r.get("conditions") or []),
+                groups={"tilt": _bin(face_tilt(cam.get("yaw", 0.0), cam.get("pitch", 0.0)), TILT_BINS),
+                        "size": _bin(max(x1 - x0, y1 - y0), SIZE_BINS)}))
+    if not out:
+        raise ValueError(f"no '{split}' images in {path}")
     return out
 
 

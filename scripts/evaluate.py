@@ -1,9 +1,11 @@
-"""Evaluate gauge readings on MeterFL (main, % FS) or MeasureBench (interval hit rate).
+"""Evaluate gauge readings on MeterFL (main, % FS), MeasureBench (interval hit rate) or the
+held-out synthetic split (% FS by condition, face tilt and gauge size).
 
 1. Write the inference manifest (one row per test image with its known range):
 
     uv run python scripts/evaluate.py manifest meterfl --out data/processed/meterfl_manifest.csv
     uv run python scripts/evaluate.py manifest measurebench --out data/processed/mb_manifest.csv
+    uv run python scripts/evaluate.py manifest synth --out data/processed/synth_val_manifest.csv
 
 2. Run the reader on the manifest and fill ``value`` (and ``pred_unit`` if it predicts one;
    leave value blank when the reader declines). Then score:
@@ -19,7 +21,8 @@ Reference baselines, no model needed:
     uv run python scripts/evaluate.py score meterfl --baseline oracle     # ground truth (sanity check)
 
 Default paths: MeterFL in data/raw/Meter-FL (corrections from configs/meterfl_corrections.csv),
-MeasureBench subset in data/processed/measurebench_dial/labels.csv.
+MeasureBench subset in data/processed/measurebench_dial/labels.csv, synthetic set in
+data/synthetic/synth_2d (split val).
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from gauge_reader.eval.datasets import (
     METERFL_CORRECTIONS,
     load_measurebench,
     load_meterfl,
+    load_synth,
     write_manifest,
 )
 from gauge_reader.eval.report import (
@@ -50,6 +54,8 @@ def load(a) -> list:
     if a.dataset == "meterfl":
         corr = None if a.no_corrections else METERFL_CORRECTIONS
         return load_meterfl(a.meterfl, corrections=corr, pressure_only=not a.all_types)
+    if a.dataset == "synth":
+        return load_synth(a.synth, split=a.split)
     flags = tuple(x for x in (a.exclude_flag or []))
     return load_measurebench(a.measurebench, exclude_barometers=a.no_barometers, exclude_flags=flags)
 
@@ -69,10 +75,12 @@ def baseline(samples, kind: str) -> dict[str, Prediction]:
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["manifest", "score"])
-    ap.add_argument("dataset", choices=["meterfl", "measurebench"])
+    ap.add_argument("dataset", choices=["meterfl", "measurebench", "synth"])
     ap.add_argument("--meterfl", type=Path, default=Path("data/raw/Meter-FL"))
     ap.add_argument("--measurebench", type=Path,
                     default=Path("data/processed/measurebench_dial/labels.csv"))
+    ap.add_argument("--synth", type=Path, default=Path("data/synthetic/synth_2d"))
+    ap.add_argument("--split", default="val", help="synth: which split of labels.jsonl")
     ap.add_argument("--all-types", action="store_true", help="MeterFL: keep ammeters, voltmeters etc.")
     ap.add_argument("--no-corrections", action="store_true", help="MeterFL: raw labels")
     ap.add_argument("--no-barometers", action="store_true", help="MeasureBench: drop barometers")
