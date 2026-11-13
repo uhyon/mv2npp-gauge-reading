@@ -70,4 +70,8 @@ uv run python scripts/download_backgrounds.py --sheet    # rebuild review sheets
 
 Review `assets/backgrounds_review/review_*.jpg` and delete photos that show a round dial gauge:
 an unlabelled gauge in the background teaches the detector to ignore real gauges.
+Then scan for gauges the eye missed (`scripts/scan_backgrounds.py`, COCO "clock" detector and,
+once trained, the gauge model). Done for the current set on 2026-11-13: 287 photos downloaded,
+24 deleted by eye, the COCO scan flagged 13 regions in the remaining 263 and none was a gauge
+(e.g. relay setting knobs, a wristwatch, part of a transformer), so 263 photos remain.
 Credit CC BY photos (creator, licence, link from the CSV) wherever a synthetic image is shown.

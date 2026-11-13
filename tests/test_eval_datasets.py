@@ -129,3 +129,46 @@ def test_range_group_names():
     assert range_group(0, 0.1, "megapascals") == "0–0.1 MPa"
     assert range_group(-1, 0, "kilogram-force per square centimeter") == "-1–0 kgf/cm2"
     assert range_group(None, 5, "bar") == "no range"
+
+
+def _synth(tmp_path, recs):
+    root = tmp_path / "synth"
+    root.mkdir()
+    lines = [json.dumps({
+        "id": f"{i:06d}", "split": split, "file": f"images/{split}/{i:06d}.jpg",
+        "value": value, "min_value": 0, "max_value": 10, "unit": "bar",
+        "bbox_xyxy": box, "conditions": conds, "style": {"needle": "bar"},
+        "camera": {"yaw": yaw, "pitch": pitch, "roll": 5.0}}) + "\n"
+        for i, (split, value, conds, yaw, pitch, box) in enumerate(recs)]
+    (root / "labels.jsonl").write_text("".join(lines), encoding="utf-8")
+    return root
+
+
+def test_synth_loader_groups_and_report(tmp_path):
+    from gauge_reader.eval.datasets import face_tilt, load_synth
+
+    assert face_tilt(0, 0) == pytest.approx(0)
+    assert face_tilt(30, 0) == pytest.approx(30) and face_tilt(0, -30) == pytest.approx(30)
+    assert face_tilt(45, 45) == pytest.approx(60)
+    root = _synth(tmp_path, [
+        ("train", 1.0, [], 0, 0, [0, 0, 100, 100]),
+        ("val", 2.0, [], 10, 5, [0, 0, 150, 120]),
+        ("val", 5.0, ["glare", "low_light"], 35, 0, [0, 0, 300, 250]),
+        ("val", 8.0, ["glare"], 50, 30, [0, 0, 500, 450])])
+    s = load_synth(root)
+    assert [x.id for x in s] == ["synth_000001", "synth_000002", "synth_000003"]
+    assert s[0].reading == 2.0 and s[0].group == "0–10 bar" and s[0].image == root / "images/val/000001.jpg"
+    assert [x.groups["tilt"] for x in s] == ["0–20°", "20–40°", "40°+"]
+    assert [x.groups["size"] for x in s] == ["0–200 px", "200–400 px", "400+ px"]
+    preds = {"synth_000001": Prediction(2.1), "synth_000002": Prediction(5.0),
+             "synth_000003": Prediction(None)}
+    rep = report(score(s, preds))
+    each = rep["by_each_flag"]
+    assert set(each) == {"glare", "low_light", "(none)"} and "by_flag" not in rep
+    assert each["glare"]["n"] == 2 and each["glare"]["coverage"] == 0.5
+    assert each["(none)"]["fs_mean"] == pytest.approx(1.0)
+    assert rep["by_tilt"]["40°+"]["coverage"] == 0 and rep["by_size"]["0–200 px"]["n"] == 1
+    assert list(rep["by_size"]) == ["0–200 px", "200–400 px", "400+ px"]
+    assert len(load_synth(root, split="train")) == 1
+    with pytest.raises(ValueError):
+        load_synth(root, split="test")

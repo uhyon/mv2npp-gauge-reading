@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import math
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,8 +120,25 @@ def by_group(rows: list[Scored], key: Callable[[Scored], str]) -> dict[str, dict
     return {g: summarize(v) for g, v in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))}
 
 
+def by_each_flag(rows: list[Scored]) -> dict[str, dict]:
+    """One group per flag with every sample that has it (a sample can be in several),
+    plus "(none)" for samples without flags. For sets where flags combine freely."""
+    names = sorted({f for r in rows for f in r.sample.flags})
+    groups = {f: [r for r in rows if f in r.sample.flags] for f in names}
+    groups["(none)"] = [r for r in rows if not r.sample.flags]
+    return {g: summarize(v) for g, v in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+            if v}
+
+
+def _bin_order(label: str) -> tuple:
+    """Bins such as "0–20°", "20–40°", "40°+" sort by their leading number."""
+    m = re.match(r"-?\d+(\.\d+)?", label)
+    return (0, float(m.group()), label) if m else (1, 0.0, label)
+
+
 def report(rows: list[Scored]) -> dict:
-    """Overall metrics plus breakdowns by range group, subset, tolerance method and flag."""
+    """Overall metrics plus breakdowns by range group, subset, tolerance method, flag and
+    any extra groups the samples carry (``EvalSample.groups``)."""
     flagged = [r for r in rows if r.sample.flags]
     out = {
         "overall": summarize(rows),
@@ -131,7 +149,13 @@ def report(rows: list[Scored]) -> dict:
         out["by_tol_method"] = by_group(rows, lambda r: r.sample.tol_method or "-")
     if flagged:
         out["without_flagged"] = summarize([r for r in rows if not r.sample.flags])
-        out["by_flag"] = by_group(flagged, lambda r: ";".join(r.sample.flags))
+        if any(len(r.sample.flags) > 1 for r in rows):  # combinations: one row per flag instead
+            out["by_each_flag"] = by_each_flag(rows)
+        else:
+            out["by_flag"] = by_group(flagged, lambda r: ";".join(r.sample.flags))
+    for key in sorted({k for r in rows for k in r.sample.groups}):
+        groups = by_group(rows, lambda r, k=key: r.sample.groups.get(k, "-"))
+        out[f"by_{key}"] = dict(sorted(groups.items(), key=lambda kv: _bin_order(kv[0])))
     return out
 
 
@@ -173,8 +197,10 @@ def format_report(rep: dict, max_groups: int = 12) -> str:
     parts = [format_table("overall", {"all": rep["overall"]})]
     if "without_flagged" in rep:
         parts.append(format_table("without flagged", {"all": rep["without_flagged"]}))
-    for key, title in [("by_range", "range"), ("by_subset", "subset"),
-                       ("by_tol_method", "tolerance"), ("by_flag", "flag")]:
+    keys = [("by_range", "range"), ("by_subset", "subset"), ("by_tol_method", "tolerance"),
+            ("by_flag", "flag"), ("by_each_flag", "flag (each)")]
+    keys += [(k, k[3:]) for k in rep if k.startswith("by_") and k not in dict(keys)]
+    for key, title in keys:
         if key in rep:
             groups = dict(list(rep[key].items())[:max_groups])
             parts.append(format_table(title, groups))

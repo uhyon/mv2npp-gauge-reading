@@ -52,6 +52,20 @@ uv run python scripts/predict_readings.py --weights runs/pose/base/weights/best.
 uv run python scripts/evaluate.py score measurebench --pred runs/pose/base/mb_pred.csv --out runs/pose/base/mb
 ```
 
+The held-out synthetic split (2,000 images) is scored the same way. Its error next to the
+MeterFL error is the gap between synthetic and real photos; the report also breaks it down by
+field condition (each one against the rest), face tilt (0–20°, 20–40°, 40°+) and gauge size.
+It is an optimistic reference: the val images share the generator and background photos with
+the training images, and Ultralytics picks `best.pt` on them. Synthetic images are whole
+scenes, so no margin is added:
+
+```bash
+uv run python scripts/evaluate.py manifest synth --out data/processed/synth_val_manifest.csv
+uv run python scripts/predict_readings.py --weights runs/pose/base/weights/best.pt --pad 0 \
+    --manifest data/processed/synth_val_manifest.csv --out runs/pose/base/synth_val_pred.csv
+uv run python scripts/evaluate.py score synth --pred runs/pose/base/synth_val_pred.csv --out runs/pose/base/synth_val
+```
+
 `predict_readings.py` uses the most confident detection per image. Rows without a range in the
 manifest (most MeasureBench images: only the hand-labelled ones have one) and images with no
 detection are left blank, which `evaluate.py` counts as declined (lower coverage). MeterFL
