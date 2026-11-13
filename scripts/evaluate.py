@@ -33,13 +33,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from gauge_reader.eval.datasets import (
-    METERFL_CORRECTIONS,
-    load_measurebench,
-    load_meterfl,
-    load_synth,
-    write_manifest,
-)
+from gauge_reader.eval.datasets import METERFL_CORRECTIONS, load_dataset, write_manifest
 from gauge_reader.eval.report import (
     Prediction,
     format_report,
@@ -51,13 +45,10 @@ from gauge_reader.eval.report import (
 
 
 def load(a) -> list:
-    if a.dataset == "meterfl":
-        corr = None if a.no_corrections else METERFL_CORRECTIONS
-        return load_meterfl(a.meterfl, corrections=corr, pressure_only=not a.all_types)
-    if a.dataset == "synth":
-        return load_synth(a.synth, split=a.split)
-    flags = tuple(x for x in (a.exclude_flag or []))
-    return load_measurebench(a.measurebench, exclude_barometers=a.no_barometers, exclude_flags=flags)
+    path = {"meterfl": a.meterfl, "measurebench": a.measurebench, "synth": a.synth}[a.dataset]
+    return load_dataset(a.dataset, path, corrections=None if a.no_corrections else METERFL_CORRECTIONS,
+                        all_types=a.all_types, exclude_barometers=a.no_barometers,
+                        exclude_flags=tuple(a.exclude_flag or []), split=a.split)
 
 
 def baseline(samples, kind: str) -> dict[str, Prediction]:
