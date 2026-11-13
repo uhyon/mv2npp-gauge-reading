@@ -57,7 +57,11 @@ reading them with `read_value` gives the true value exactly.
 
 `scripts/download_backgrounds.py` fetches CC0, public-domain and CC BY photos of pipes, valves,
 pump rooms and turbine halls from [Openverse](https://openverse.org) into `assets/backgrounds/`,
-with a credit line per photo in `assets/backgrounds/ATTRIBUTION.csv`. Photos are not committed.
+with a credit line per photo in `assets/backgrounds/ATTRIBUTION.csv`. Photos are not committed;
+the CSV is: `download_backgrounds.py --from-csv` fetches exactly the listed photos under the same
+names, which reproduces the reviewed set (and the generated images), and it doubles as
+the credit list. README and demo images use only CC0, public-domain or procedural backgrounds,
+so they need no per-image credit.
 
 ```bash
 uv run python scripts/download_backgrounds.py            # about 300 photos, 15 per search term

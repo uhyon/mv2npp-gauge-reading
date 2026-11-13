@@ -10,6 +10,12 @@ Run this on your own machine (the photos are not committed):
     uv run python scripts/download_backgrounds.py                 # about 300 photos
     uv run python scripts/download_backgrounds.py --per-query 40 --licenses cc0,pdm
     uv run python scripts/download_backgrounds.py --sheet          # review sheets only
+    uv run python scripts/download_backgrounds.py --from-csv       # reproduce the reviewed set
+
+ATTRIBUTION.csv is committed (the photos are not). --from-csv fetches exactly the photos it
+lists, under the same file names, so a fresh clone gets the same reviewed set and the
+generator draws the same backgrounds for each seed. Without --from-csv the script searches
+for more photos and rewrites the CSV, which then needs a new review.
 
 Then look through assets/backgrounds_review/review_*.jpg and delete photos that show a
 round dial gauge clearly: the generator would treat it as background, which
@@ -142,6 +148,32 @@ def review_sheets(out: Path, per_sheet: int = 48, thumb: int = 240) -> None:
         print(f"wrote {path} ({len(chunk)} photos)")
 
 
+def fetch_listed(out: Path, attr_path: Path, min_size: int, delay: float) -> None:
+    """Download every photo listed in ATTRIBUTION.csv that is missing; never edits the CSV."""
+    rows = load_attribution(attr_path)
+    if not rows:
+        raise SystemExit(f"{attr_path} is missing or empty")
+    missing = [r for r in rows.values() if not (out / r["file"]).exists()]
+    print(f"{len(rows)} listed, {len(missing)} to download")
+    failed = []
+    for k, r in enumerate(missing):
+        try:
+            meta = get_json(API + urllib.parse.quote(r["id"]) + "/")
+            ok = download(meta["url"], out / r["file"], min_size)
+        except (OSError, ValueError, KeyError) as e:
+            print(f"  {r['file']}: {type(e).__name__}")
+            ok = False
+        if not ok:
+            failed.append(r["file"])
+        time.sleep(delay)
+        if (k + 1) % 25 == 0:
+            print(f"  {k + 1}/{len(missing)}")
+    print(f"done: {len(missing) - len(failed)} downloaded, {len(failed)} failed")
+    if failed:
+        print("not available any more (the set differs from the original without them):")
+        print("\n".join(f"  {f}" for f in failed))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--out", type=Path, default=OUT)
@@ -151,10 +183,15 @@ def main() -> None:
     ap.add_argument("--min-size", type=int, default=640, help="minimum short side in px")
     ap.add_argument("--delay", type=float, default=3.5, help="seconds between API requests")
     ap.add_argument("--sheet", action="store_true", help="only rebuild review sheets and CSV")
+    ap.add_argument("--from-csv", action="store_true",
+                    help="download exactly the photos listed in ATTRIBUTION.csv (reproduce a set)")
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
     attr_path = args.out / "ATTRIBUTION.csv"
+    if args.from_csv:
+        fetch_listed(args.out, attr_path, args.min_size, args.delay)
+        return
     rows = load_attribution(attr_path)
     if not args.sheet:
         seen = set(rows)
