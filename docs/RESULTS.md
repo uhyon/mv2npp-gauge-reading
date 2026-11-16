@@ -36,8 +36,9 @@ compared on MeterFL.
 | catalog | 6 | 6.10 | 1.41 | 67% |
 | lab | 6 | 7.63 | 1.23 | 67% |
 
-Model time (ER-07): median 91 ms per image on a 4-core cloud CPU (Intel Xeon, 2.3 GHz),
-PyTorch, batch 1, 640 px.
+Model time (ER-07), PyTorch, batch 1, 640 px, median per image: 91 ms on a 4-core cloud CPU
+(Intel Xeon, 2.3 GHz); 55 ms (MeasureBench) and 82 ms (synthetic val) on the work PC
+(Intel Core i5-12400).
 
 **Where the error comes from** (images inspected with `predict_readings.py --overlay`):
 
@@ -73,7 +74,60 @@ One degradation at a time (`gauge_reader.eval.degrade`, seed 0), same reader as 
 Radiation speckle up to 0.5% of the pixels does not change the readings. Low light and motion
 blur do: at 25 px of blur 11% of the gauges are not found and the mean error doubles.
 
-MeasureBench (ER-02) and the synthetic val split are scored on the PC; their results follow.
+### Synthetic val split (2,000 images, no margin)
+
+| face tilt | n | FS mean | FS median | ≤2% FS |
+| --- | ---: | ---: | ---: | ---: |
+| all | 2000 | 2.00 | 1.26 | 65% |
+| 0–20° | 309 | 0.53 | 0.42 | 100% |
+| 20–40° | 1008 | 1.51 | 1.16 | 73% |
+| 40°+ | 683 | 3.37 | 2.79 | 39% |
+
+Field conditions change the error little (no condition 1.89% FS, motion blur 2.20%), and
+needle style and gauge size not at all. Degrading 500 of these images (ER-05 protocol) costs
+at most +0.18 (low light), +0.06 (speckle) and +0.70% FS (motion blur) at severity 3, far less
+than on the real MeterFL photos.
+
+**The error is in the reading method, not the keypoints.** Reading the *true* keypoints with
+the same image-plane angles (`gauge_reader.reading.geometry`) already gives most of it:
+
+| face tilt | n | true keypoints: FS mean / ≤2% | model vs true-keypoint reading: FS mean / ≤2% | model: FS mean / ≤2% |
+| --- | ---: | ---: | ---: | ---: |
+| all | 2000 | 1.75 / 68% | 0.63 / 96% | 2.00 / 65% |
+| 0–20° | 309 | 0.24 / 100% | 0.46 / 100% | 0.53 / 100% |
+| 20–40° | 1008 | 1.27 / 78% | 0.59 / 98% | 1.51 / 73% |
+| 40°+ | 683 | 3.14 / 39% | 0.77 / 93% | 3.37 / 39% |
+
+Median keypoint error, in % of the gauge box's longer side: centre 0.59, tip 1.20, scale min
+0.74, scale max 0.68. On a tilted face, angles measured around the centre in the image are not
+the angles on the dial, so even perfect keypoints misread.
+
+### MeasureBench (ER-02, 142 real photos)
+
+42 of the 142 images have a scale range (hand-labelled); the GT-range reader answers only
+those. It read 38 of them and found no gauge in 4.
+
+| images with a range | cover | FS mean | FS median | ≤2% FS | interval hit |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 90% | 18.41 | 11.11 | 21% | 16% |
+
+Main cause in each of the 38 answered images (overlays inspected one by one; no ground-truth
+label looked wrong):
+
+| cause | images |
+| --- | ---: |
+| needle tip put on the counterweight end, on the hub, or short of the tip | 6 |
+| scale min/max points off the end ticks (3 of them dual-scale dials) | 5 |
+| gauge small in a wide photo | 4 |
+| unusual scale arc (differential gauge, near 360°, zero at 6 o'clock) | 3 |
+| dial turned far from upright | 3 |
+| several dials in the photo | 1 |
+| non-linear scale | 1 |
+| no clear failure (all under 4.2% FS) | 15 |
+
+The 4 images without a detection: 3 small gauges (2 of them strongly tilted) and 1 dark photo.
+Most failures are dial designs the generator does not make yet: two-ended needles, dual scales,
+arcs outside 180–270°, and gauges far away in wide shots.
 
 ## Version 2 (next)
 
