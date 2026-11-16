@@ -80,4 +80,8 @@ Then scan for gauges the eye missed (`scripts/scan_backgrounds.py`, COCO "clock"
 once trained, the gauge model). Done for the current set on 2026-11-13: 287 photos downloaded,
 24 deleted by eye, the COCO scan flagged 13 regions in the remaining 263 and none was a gauge
 (e.g. relay setting knobs, a wristwatch, part of a transformer), so 263 photos remain.
+A second scan on 2026-11-16 with the Version 1 gauge model (and the COCO detector again, same 13
+regions) flagged one region, ov_94c2133f (confidence 0.28): an empty band beside a valve on a
+riveted tank, checked by eye, not a gauge. Nothing was deleted; 263 photos remain. The gauge
+model is a weak check on its own, since it was trained to treat these photos as "no gauge".
 Credit CC BY photos (creator, licence, link from the CSV) wherever a synthetic image is shown.
