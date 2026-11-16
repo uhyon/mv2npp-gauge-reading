@@ -3,13 +3,20 @@
     uv run python scripts/train_pose.py --data data/synthetic/synth_2d --epochs 50
     uv run python scripts/train_pose.py --data /kaggle/input/synth-2d/synth_2d \\
         --project /kaggle/working/runs --epochs 50 --batch 32
-    uv run python scripts/train_pose.py --resume runs/pose/base/weights/last.pt
+    uv run python scripts/train_pose.py --resume runs/pose/arc/weights/last.pt \\
+        --data data/synthetic/synth_2d --name arc          # same --data/--project/--name
     uv run python scripts/train_pose.py --data data/synthetic/synth_2d --fraction 0.05 \\
         --epochs 1 --name smoke                              # quick check that it runs
 
 --data is the dataset folder (images/, labels/, data.yaml) or a data.yaml. The folder's
 data.yaml stores an absolute path from the machine that generated it, so a copy with the
 right path is written to the run folder: the dataset can be moved (Kaggle, Colab) as is.
+
+By default the model learns 7 keypoints: the dataset's 4 plus three on the scale arc (25, 50
+and 75% of the scale), computed from labels.jsonl into a linked copy under --work
+(scripts/arc_labels.py). With them a reading is taken on the dial face, which undoes the tilt
+of the view (gauge_reader.reading.perspective). --no-arc trains on the dataset's own 4 points,
+as Versions 1 and 2 did.
 
 Horizontal flips are always off: a mirrored dial reads counter-clockwise, which real
 gauges never do. Rotation is the opposite case: a turned dial still reads clockwise, and real
@@ -22,11 +29,15 @@ Needs the train extra: uv pip install -e ".[train]"
 from __future__ import annotations
 
 import argparse
+import sys
+import tempfile
 from pathlib import Path
 
 import yaml
 
-KPT_SHAPE = [4, 3]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+KPT_SHAPES = ([4, 3], [7, 3])
 
 
 def dataset_yaml(data: Path, out_dir: Path) -> Path:
@@ -35,8 +46,8 @@ def dataset_yaml(data: Path, out_dir: Path) -> Path:
     root = src.parent
     with open(src, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
-    if cfg.get("kpt_shape") != KPT_SHAPE:
-        raise SystemExit(f"{src}: kpt_shape {cfg.get('kpt_shape')}, expected {KPT_SHAPE}")
+    if cfg.get("kpt_shape") not in KPT_SHAPES:
+        raise SystemExit(f"{src}: kpt_shape {cfg.get('kpt_shape')}, expected one of {KPT_SHAPES}")
     for split in ("train", "val"):
         if not (root / cfg[split]).is_dir():
             raise SystemExit(f"{src}: {split} folder {root / cfg[split]} not found")
@@ -47,6 +58,17 @@ def dataset_yaml(data: Path, out_dir: Path) -> Path:
         f.write("# copy of the dataset's data.yaml with path set for this machine\n")
         yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
     return dst
+
+
+def prepare_data(data: Path, *, arc: bool, work: Path, out_dir: Path) -> Path:
+    """data.yaml to train on: the dataset's own (4 keypoints) or its 7-keypoint copy in ``work``."""
+    if arc:
+        from gauge_reader.synth.arc_labels import build
+
+        counts = build(data if data.is_dir() else data.parent, work)
+        print("arc labels: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + f" images in {work}")
+        data = work
+    return dataset_yaml(data, out_dir)
 
 
 def main(argv=None) -> None:
@@ -67,16 +89,28 @@ def main(argv=None) -> None:
                     help="random rotation range, +/- degrees (0 = off, as in Version 1)")
     ap.add_argument("--patience", type=int, default=15)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--resume", type=Path, help="continue an interrupted run from its last.pt")
+    ap.add_argument("--no-arc", dest="arc", action="store_false",
+                    help="train on the dataset's 4 keypoints only (Versions 1 and 2)")
+    ap.add_argument("--work", type=Path, default=Path(tempfile.gettempdir()) / "gauge_arc",
+                    help="where the 7-keypoint copy of the dataset is built (links + labels)")
+    ap.add_argument("--resume", type=Path,
+                    help="continue an interrupted run from its last.pt (give the same --data, "
+                         "--project and --name; the keypoint count comes from the checkpoint)")
     a = ap.parse_args(argv)
 
     from ultralytics import YOLO  # imported late so --help works without the train extra
 
+    work, out_dir = a.work / a.name, Path(a.project) / f"{a.name}_data"
     if a.resume:
-        YOLO(str(a.resume)).train(resume=True)
+        # A new session (Kaggle) has lost the run's data.yaml copy and the arc copy: rebuild
+        # them for the keypoints the checkpoint was trained on, then pass the data along.
+        model = YOLO(str(a.resume))
+        arc = list(model.model.kpt_shape) == KPT_SHAPES[1]
+        data_yaml = prepare_data(a.data, arc=arc, work=work, out_dir=out_dir)
+        model.train(resume=True, data=str(data_yaml))
         return
 
-    data_yaml = dataset_yaml(a.data, Path(a.project) / f"{a.name}_data")
+    data_yaml = prepare_data(a.data, arc=a.arc, work=work, out_dir=out_dir)
     batch = int(a.batch) if a.batch >= 1 or a.batch == -1 else a.batch
     model = YOLO(a.model)
     model.train(
