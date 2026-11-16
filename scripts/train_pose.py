@@ -12,7 +12,11 @@ data.yaml stores an absolute path from the machine that generated it, so a copy 
 right path is written to the run folder: the dataset can be moved (Kaggle, Colab) as is.
 
 Horizontal flips are always off: a mirrored dial reads counter-clockwise, which real
-gauges never do. Needs the train extra: uv pip install -e ".[train]"
+gauges never do. Rotation is the opposite case: a turned dial still reads clockwise, and real
+gauges are mounted and photographed at any angle, so images are rotated at random over the
+full circle (--degrees 180). Version 1 (2026-11-13) was trained with --degrees 0 on renders
+rolled by at most 15 degrees, and misread every MeterFL dial turned far from upright.
+Needs the train extra: uv pip install -e ".[train]"
 """
 
 from __future__ import annotations
@@ -59,6 +63,8 @@ def main(argv=None) -> None:
     ap.add_argument("--project", default="runs/pose")
     ap.add_argument("--name", default="base")
     ap.add_argument("--fraction", type=float, default=1.0, help="share of the train set to use")
+    ap.add_argument("--degrees", type=float, default=180.0,
+                    help="random rotation range, +/- degrees (0 = off, as in Version 1)")
     ap.add_argument("--patience", type=int, default=15)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--resume", type=Path, help="continue an interrupted run from its last.pt")
@@ -78,8 +84,9 @@ def main(argv=None) -> None:
         workers=a.workers, project=a.project, name=a.name, exist_ok=False, seed=a.seed,
         fraction=a.fraction, patience=a.patience, plots=True,
         fliplr=0.0,   # mirrored dials read counter-clockwise: never flip
-        # The renderer already varies view angle, roll, scale, light and blur; keep the
-        # remaining Ultralytics augmentation at its defaults (mosaic, HSV, translate, scale).
+        degrees=a.degrees,  # turned dials still read clockwise: rotate freely
+        # The renderer already varies view angle, scale, light and blur; keep the remaining
+        # Ultralytics augmentation at its defaults (mosaic, HSV, translate, scale).
     )
     print(f"best weights: {Path(model.trainer.save_dir) / 'weights' / 'best.pt'}")
 

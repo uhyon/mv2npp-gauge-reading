@@ -31,9 +31,15 @@ uv run python scripts/train_pose.py --data data/synthetic/synth_2d --fraction 0.
 
 - `--data` is the dataset folder; a copy of its `data.yaml` with the right absolute path is
   written next to the run, so the folder can be moved as is.
-- `fliplr=0` is forced: a mirrored dial reads counter-clockwise. Other augmentation stays at the
-  Ultralytics defaults; the renderer already varies view, roll, scale, light and blur.
+- `fliplr=0` is forced: a mirrored dial reads counter-clockwise.
+- Images are rotated at random over the full circle (`--degrees 180`, the default since Version 2):
+  a turned dial still reads clockwise, and gauges are mounted and photographed at any angle.
+  Version 1 used `--degrees 0` and misread every MeterFL dial turned by 90° or more
+  ([RESULTS.md](RESULTS.md)). Other augmentation stays at the Ultralytics defaults; the renderer
+  already varies view, scale, light and blur.
 - Default model `yolo11s-pose.pt` (COCO-pretrained), 640 px, early stop after 15 epochs without gain.
+- The notebook names the run (`NAME`): Version 1 was `base`, Version 2 is `rot`. Below, replace
+  `runs/pose/base` with the run being evaluated.
 
 ## 2. Read the test sets (on the PC, CPU is enough)
 
@@ -94,4 +100,4 @@ uv run python scripts/robustness.py synth --weights runs/pose/base/weights/best.
 must not be used in demos.
 
 Floor to beat on MeterFL: always reading mid-scale gives 20.7% FS mean error and 3% of
-images within 2% FS.
+images within 2% FS. Results so far: [RESULTS.md](RESULTS.md).
