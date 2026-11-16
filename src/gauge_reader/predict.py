@@ -4,6 +4,11 @@ Used by scripts/predict_readings.py (one manifest) and scripts/robustness.py (th
 images under each degradation). The scale range comes from the row (ground truth), so the
 reading measures the keypoint stage only.
 
+Models with the scale-arc keypoints are read on the dial face (``DialFit``, which undoes the
+tilt of the view); ``fit_rms`` records how well their points fit a round dial, and
+``fraction_img`` the image-plane reading for comparison. 4-keypoint models are read in the
+image plane.
+
 Two physical checks turn keypoint failures into bounded errors or declines:
 
 - the scale arc from the min to the max keypoint must be at least ``min_sweep`` degrees
@@ -23,13 +28,18 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from gauge_reader.keypoints.yolo import KP_NAMES, detections_from_result, pad_image, shift
-from gauge_reader.reading.geometry import clockwise_angle
+from gauge_reader.keypoints.yolo import (
+    ARC_NAMES,
+    KP_NAMES,
+    detections_from_result,
+    pad_image,
+    shift,
+)
 
 COLORS = {"center": (255, 255, 0), "tip": (0, 0, 255), "scale_min": (255, 0, 255),
-          "scale_max": (0, 165, 255)}
-FIELDS = ["id", "value", "pred_unit", "box_conf", "min_kpt_conf", "fraction", "sweep", "n_det",
-          "status", "ms"] + [f"{k}_{c}" for k in KP_NAMES for c in "xy"]
+          "scale_max": (0, 165, 255), "arc": (0, 255, 255)}
+FIELDS = ["id", "value", "pred_unit", "box_conf", "min_kpt_conf", "fraction", "fraction_img", "sweep",
+          "fit_rms", "n_det", "status", "ms"] + [f"{k}_{c}" for k in KP_NAMES + ARC_NAMES for c in "xy"]
 MIN_SWEEP_DEG = 90.0
 CLIP = 0.1
 STATUSES = ("ok", "no_range", "no_detection", "unreadable", "bad_geometry")
@@ -52,6 +62,8 @@ def draw(img: np.ndarray, det, text: str) -> np.ndarray:
     for name in KP_NAMES:
         p = tuple(map(int, getattr(det.keypoints, name)))
         cv2.circle(out, p, 3 * s, COLORS[name], -1)
+    for p in det.arc:
+        cv2.circle(out, tuple(map(int, p)), 2 * s, COLORS["arc"], -1)
     cv2.putText(out, text, (4, 14 * s), cv2.FONT_HERSHEY_SIMPLEX, 0.45 * s, (0, 255, 0), s)
     return out
 
@@ -96,8 +108,16 @@ def read_rows(model, rows: list[dict], *, imgsz: int = 640, conf: float = 0.1, p
                 for k in KP_NAMES:
                     x, y = getattr(d.keypoints, k)
                     rec[f"{k}_x"], rec[f"{k}_y"] = f"{x:.1f}", f"{y:.1f}"
-                kp = d.keypoints
-                sweep = clockwise_angle(kp.center, kp.scale_min, kp.scale_max)
+                for k, (x, y) in zip(ARC_NAMES, d.arc):
+                    rec[f"{k}_x"], rec[f"{k}_y"] = f"{x:.1f}", f"{y:.1f}"
+                fit = d.dial_fit()
+                if fit is not None:
+                    rec["fit_rms"] = f"{fit.rms:.4f}"
+                try:
+                    rec["fraction_img"] = f"{d.image_fraction():.4f}"
+                except ValueError:  # min and max in the same direction
+                    pass
+                sweep = d.sweep()
                 rec["sweep"] = f"{sweep:.1f}"
                 if sweep < max(min_sweep, 1e-6):
                     rec["status"] = "bad_geometry"

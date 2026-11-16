@@ -100,7 +100,7 @@ the same image-plane angles (`gauge_reader.reading.geometry`) already gives most
 
 Median keypoint error, in % of the gauge box's longer side: centre 0.59, tip 1.20, scale min
 0.74, scale max 0.68. On a tilted face, angles measured around the centre in the image are not
-the angles on the dial, so even perfect keypoints misread.
+the angles on the dial, so even perfect keypoints misread. Version 3 reads on the dial face.
 
 ### MeasureBench (ER-02, 142 real photos)
 
@@ -129,10 +129,31 @@ The 4 images without a detection: 3 small gauges (2 of them strongly tilted) and
 Most failures are dial designs the generator does not make yet: two-ended needles, dual scales,
 arcs outside 180–270°, and gauges far away in wide shots.
 
-## Version 2 (next)
+## Version 2 (training)
 
-Same data and settings plus random rotation over the full circle (`--degrees 180`, now the
-default of `scripts/train_pose.py`). A turned dial still reads clockwise, so rotation, unlike a
-mirror flip, keeps every label valid. Ultralytics fits the box around the turned box corners, so
-training boxes of turned gauges are up to 1.4 times larger than the dial; readings use the
-keypoints only.
+Same data and settings plus random rotation over the full circle (`--degrees 180`, the default
+of `scripts/train_pose.py` since then; with the Version 3 code, add `--no-arc` to repeat it). A
+turned dial still reads clockwise, so rotation, unlike a mirror flip, keeps every label valid.
+Ultralytics fits the box around the turned box corners, so training boxes of turned gauges are
+up to 1.4 times larger than the dial; readings use the keypoints only.
+
+## Version 3 (next): reading on the dial face
+
+Three more keypoints on the scale arc, at 25, 50 and 75% of the scale (7 in all), computed for
+the existing synthetic set from its stored homographies (`scripts/arc_labels.py`, run by
+`train_pose.py` by default; nothing is rendered again). The centre and the five scale points are
+the image of a circle and its centre with the scale points evenly spread, so a homography from
+the dial face to the photo can be fitted, and the needle is read on the face, where a tilted
+view no longer distorts the angles (`gauge_reader.reading.perspective`). With the true keypoints
+of generated renders the reading is exact at any tilt and roll (tests). Simulated on 100
+renders, with the true points moved by random noise of 0.6% of the box (1.0% for the tip), close
+to the Version 1 keypoint error:
+
+| reading | FS mean | ≤2% FS | 40°+ tilt: FS mean / ≤2% |
+| --- | ---: | ---: | ---: |
+| image-plane angles, 4 keypoints | 1.70 | 72% | 2.27 / 61% |
+| piecewise between the 5 scale points | 0.96 | 90% | 1.29 / 78% |
+| dial-face fit (Version 3) | 0.69 | 98% | 0.72 / 97% |
+
+The fit residual (`fit_rms`, as a share of the scale radius) tells how well the points agree
+with a round dial; it is a candidate RETAKE signal, which keypoint confidence is not.

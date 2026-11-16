@@ -45,8 +45,14 @@ Keypoints follow `gauge_reader.reading.geometry`: `center`, `tip` (needle tip), 
   before this field existed, `generate_synth.py --backfill-backgrounds --out <set>` adds it by
   replaying each seed (same config and background folder needed; no images are written).
 
+The three scale-arc keypoints of the 7-keypoint models (25, 50 and 75% of the scale) are not
+stored: `scripts/arc_labels.py`, which `train_pose.py` runs by default, places them on the flat
+dial's scale circle at those shares of `sweep_deg` and maps them through `homography`, so a set
+generated before Version 3 is used as it is.
+
 `tests/test_synth.py` checks that mapping the image keypoints back through the homography and
-reading them with `read_value` gives the true value exactly.
+reading them with `read_value` gives the true value exactly; `tests/test_arc_labels.py` checks
+that the arc points at 0 and 100% land on the stored scale-min and scale-max keypoints.
 
 ## Known gaps (next)
 

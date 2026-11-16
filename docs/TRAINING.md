@@ -1,8 +1,11 @@
 # Training and first evaluation (phase 3)
 
-Baseline: one Ultralytics YOLO pose model finds the gauge (box) and its four keypoints
-(center, needle tip, scale min, scale max) on the synthetic set. The reading is the needle
-angle mapped onto the scale range (`gauge_reader.reading.geometry`). In this first
+One Ultralytics YOLO pose model, trained on the synthetic set, finds the gauge (box) and its
+keypoints: center, needle tip, scale min and scale max, and since Version 3 three more on the
+scale arc, at 25, 50 and 75% of the scale. With the arc points the needle is read on the dial
+face: a homography from a round dial to the photo is fitted to the centre and the five scale
+points, which undoes the tilt of the view (`gauge_reader.reading.perspective`). A 4-keypoint
+model reads the needle angle in the image (`gauge_reader.reading.geometry`). In this first
 evaluation the **range comes from the ground truth**, so the error measured is the needle and
 keypoint error only; scale OCR (range and unit) is added in phase 4 and scored separately.
 
@@ -37,9 +40,17 @@ uv run python scripts/train_pose.py --data data/synthetic/synth_2d --fraction 0.
   Version 1 used `--degrees 0` and misread every MeterFL dial turned by 90° or more
   ([RESULTS.md](RESULTS.md)). Other augmentation stays at the Ultralytics defaults; the renderer
   already varies view, scale, light and blur.
+- Seven keypoints by default (since Version 3): the dataset's four plus three on the scale arc.
+  They are computed from `labels.jsonl` (each image's dial-to-image homography and scale sweep)
+  into a copy of the set under `--work` that links the images and holds the new labels, so
+  nothing is rendered or uploaded again (`scripts/arc_labels.py` builds the same copy on its
+  own). `--no-arc` trains on the four points, as Versions 1 and 2 did.
+- `--resume runs/.../weights/last.pt` continues a stopped run. Give the same `--data`, `--project`
+  and `--name`: a new Kaggle session has lost the run's copies of the data, so they are built
+  again, with the keypoint count of the checkpoint.
 - Default model `yolo11s-pose.pt` (COCO-pretrained), 640 px, early stop after 15 epochs without gain.
-- The notebook names the run (`NAME`): Version 1 was `base`, Version 2 is `rot`. Below, replace
-  `runs/pose/base` with the run being evaluated.
+- The notebook names the run (`NAME`): Version 1 was `base`, Version 2 `rot`, Version 3 is
+  `arc`. Below, replace `runs/pose/base` with the run being evaluated.
 
 ## 2. Read the test sets (on the PC, CPU is enough)
 
@@ -80,7 +91,10 @@ manifest (most MeasureBench images: only the hand-labelled ones have one) and im
 detection are left blank, which `evaluate.py` counts as declined (lower coverage). MeterFL
 images are tight crops, so a grey margin of 15% per side is added first (`--pad`, try 0 to
 compare). Extra columns (keypoints, box and keypoint confidence, needle fraction) are kept for
-error analysis, and `--overlay` draws the predicted keypoints on every image.
+error analysis, and `--overlay` draws the predicted keypoints on every image. For a 7-keypoint
+model `fraction` and `sweep` come from the dial-face fit, `fraction_img` keeps the image-plane
+reading for comparison, and `fit_rms` is the fit residual as a share of the scale radius: how
+well the points agree with a round dial, a candidate RETAKE signal.
 
 ## 3. Robustness to field conditions (ER-05)
 

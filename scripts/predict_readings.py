@@ -13,6 +13,10 @@ needle fraction, scale arc, model time in ms) are kept for error analysis; evalu
 only id, value, pred_unit. A scale arc under --min-sweep degrees is declined (bad_geometry)
 and the needle fraction is clipped to [-clip, 1+clip]; see gauge_reader.predict.
 
+A model with the three scale-arc keypoints (Version 3 on) is read on the dial face: fraction
+and sweep come from the fitted dial, fraction_img keeps the image-plane reading and fit_rms
+the fit residual (gauge_reader.reading.perspective). A 4-keypoint model is read in the image.
+
 --pad adds a grey margin around each test image, because the synthetic training images
 show the gauge with background around it while MeterFL crops fill the frame (use --pad 0
 for synthetic images). --overlay DIR saves each image with the predicted keypoints drawn.
