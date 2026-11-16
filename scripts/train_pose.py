@@ -19,10 +19,11 @@ of the view (gauge_reader.reading.perspective). --no-arc trains on the dataset's
 as Versions 1 and 2 did.
 
 Horizontal flips are always off: a mirrored dial reads counter-clockwise, which real
-gauges never do. Rotation is the opposite case: a turned dial still reads clockwise, and real
-gauges are mounted and photographed at any angle, so images are rotated at random over the
-full circle (--degrees 180). Version 1 (2026-11-13) was trained with --degrees 0 on renders
-rolled by at most 15 degrees, and misread every MeterFL dial turned far from upright.
+gauges never do. Rotation keeps labels valid (a turned dial still reads clockwise), but
+the range is kept small (--degrees 30, on top of the renders' own roll of up to 15 degrees).
+Version 2 (2026-11-16) rotated over the full circle (--degrees 180) and lost the sense of which
+way is up on real photos: its scale-min and scale-max points fell toward the dial centre and
+MeterFL error rose from 2.93 to 10.18% FS. Dials turned by 90 degrees or more are left to RETAKE.
 Needs the train extra: uv pip install -e ".[train]"
 """
 
@@ -85,8 +86,8 @@ def main(argv=None) -> None:
     ap.add_argument("--project", default="runs/pose")
     ap.add_argument("--name", default="base")
     ap.add_argument("--fraction", type=float, default=1.0, help="share of the train set to use")
-    ap.add_argument("--degrees", type=float, default=180.0,
-                    help="random rotation range, +/- degrees (0 = off, as in Version 1)")
+    ap.add_argument("--degrees", type=float, default=30.0,
+                    help="random rotation range, +/- degrees (0 = off as in Version 1, 180 = Version 2)")
     ap.add_argument("--patience", type=int, default=15)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-arc", dest="arc", action="store_false",
@@ -118,7 +119,7 @@ def main(argv=None) -> None:
         workers=a.workers, project=a.project, name=a.name, exist_ok=False, seed=a.seed,
         fraction=a.fraction, patience=a.patience, plots=True,
         fliplr=0.0,   # mirrored dials read counter-clockwise: never flip
-        degrees=a.degrees,  # turned dials still read clockwise: rotate freely
+        degrees=a.degrees,  # small range: full-circle rotation loses which way is up
         # The renderer already varies view angle, scale, light and blur; keep the remaining
         # Ultralytics augmentation at its defaults (mosaic, HSV, translate, scale).
     )
