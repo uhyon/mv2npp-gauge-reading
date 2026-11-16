@@ -35,10 +35,12 @@ uv run python scripts/train_pose.py --data data/synthetic/synth_2d --fraction 0.
 - `--data` is the dataset folder; a copy of its `data.yaml` with the right absolute path is
   written next to the run, so the folder can be moved as is.
 - `fliplr=0` is forced: a mirrored dial reads counter-clockwise.
-- Images are rotated at random over the full circle (`--degrees 180`, the default since Version 2):
-  a turned dial still reads clockwise, and gauges are mounted and photographed at any angle.
-  Version 1 used `--degrees 0` and misread every MeterFL dial turned by 90° or more
-  ([RESULTS.md](RESULTS.md)). Other augmentation stays at the Ultralytics defaults; the renderer
+- Images are rotated at random by up to ±30° (`--degrees 30`, the default since Version 3), on top
+  of the renders' own roll of up to 15°. Version 1 used `--degrees 0` and misread every MeterFL
+  dial turned by 90° or more. Version 2 rotated over the full circle (`--degrees 180`) and did
+  worse overall: on real photos it could no longer tell which way is up and put the scale-min
+  and scale-max points near the dial centre ([RESULTS.md](RESULTS.md)). Dials turned by 90° or
+  more are left to RETAKE. Other augmentation stays at the Ultralytics defaults; the renderer
   already varies view, scale, light and blur.
 - Seven keypoints by default (since Version 3): the dataset's four plus three on the scale arc.
   They are computed from `labels.jsonl` (each image's dial-to-image homography and scale sweep)

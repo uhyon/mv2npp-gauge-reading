@@ -47,7 +47,8 @@ Model time (ER-07), PyTorch, batch 1, 640 px, median per image: 91 ms on a 4-cor
   upside down, and one small hand-held gauge upside down. The model never saw a dial rolled by more than 15°, so it puts the
   scale-min and scale-max points at the bottom of the dial, where they sit on an upright gauge.
   These 9 images carry 38% of the total error; without them the mean is 1.87% FS and 70% are
-  within 2% FS. Version 2 trains with rotation over the full circle.
+  within 2% FS. Version 2 trained with rotation over the full circle, which fixed most of these but
+  broke the rest (below).
 - **Dials unlike the renders, and small gauges.** The next 4 (8–19% FS): a black car oil-pressure
   dial, two gauges that fill a small part of a wide photo (box confidence 0.36 for one), and a
   differential gauge with a centre zero.
@@ -129,13 +130,38 @@ The 4 images without a detection: 3 small gauges (2 of them strongly tilted) and
 Most failures are dial designs the generator does not make yet: two-ended needles, dual scales,
 arcs outside 180–270°, and gauges far away in wide shots.
 
-## Version 2 (training)
+## Version 2 (2026-11-16): rotation over the full circle
 
-Same data and settings plus random rotation over the full circle (`--degrees 180`, the default
-of `scripts/train_pose.py` since then; with the Version 3 code, add `--no-arc` to repeat it). A
-turned dial still reads clockwise, so rotation, unlike a mirror flip, keeps every label valid.
-Ultralytics fits the box around the turned box corners, so training boxes of turned gauges are
-up to 1.4 times larger than the dial; readings use the keypoints only.
+Same data and settings plus random rotation over the full circle (`--degrees 180`; with the
+Version 3 code, add `--no-arc --degrees 180` to repeat it). yolo11s-pose, 50 epochs on Kaggle
+(T4 x2). A turned dial still reads clockwise, so rotation keeps every label valid, but the
+result is much worse than Version 1:
+
+| MeterFL, 262 images (GT range, margin 15%) | Version 1 | Version 2 |
+| --- | ---: | ---: |
+| mean % FS | 2.93 | 10.18 |
+| median % FS | 1.29 | 3.73 |
+| within 2% FS (all images) | 68% | 32% |
+| coverage | 100% | 96% (8 bad geometry, 3 no detection) |
+| scale-min point distance from centre / needle length (median) | 1.08 | 0.62 |
+| synthetic val pose loss, last epoch | 0.0044 | 0.0135 |
+
+It did fix most of the dials turned by 90° or more (for example 65.2 → 6.6% FS and
+30.0 → 0.9% FS), and the needle centre and tip stay accurate. But on most upright photos the
+scale-min and scale-max points now sit well inside the dial, near the centre. Rotated over the
+full circle, the model no longer knows which way is up on a real photo; the renders give it
+cues that the real dials do not, and where it is unsure it puts the end points between the
+possible positions. The val loss was still falling slowly at epoch 50, but not fast enough to
+close a gap of three times.
+
+Test-time rotation with Version 1 does not help either. Feeding each image turned by 0, 90, 180
+and 270° and keeping the best of the four would give 1.74% FS (70% within 2%) if the right turn
+could be picked, but picking by keypoint confidence gives 24.3% FS and picking the turn that puts
+Version 2's scale gap at the bottom gives 10.6% FS.
+
+So Version 3 rotates by up to ±30° only (`--degrees 30`, the default from now on), on top of the
+renders' own roll of up to 15°. Field photos of a round are taken upright; a dial turned by 90°
+or more is left to RETAKE.
 
 ## Version 3 (next): reading on the dial face
 
