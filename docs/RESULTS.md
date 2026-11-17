@@ -379,7 +379,7 @@ close-up through a crop of its own box instead let 2–5x more MeterFL photos fa
 
 | MeterFL, 262, Version 3 | coverage | mean / median % FS | ≤2% FS: read / all | time per image (container) |
 | --- | ---: | ---: | ---: | ---: |
-| GT range (needle only) | 92% | 2.08 / 0.97 | 80% / 74% | 502 ms |
+| GT range (needle only) | 91% | 2.12 / 0.97 | 80% / 73% | 392 ms |
 | OCR range (full pipeline) | 83% | 1.88 / 0.95 | 81% / 67% | 603 ms |
 
 Declined: 22 RETAKE, 22 no OCR range, 1 no gauge. On the read photos the full pipeline meets
