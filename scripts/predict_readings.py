@@ -17,6 +17,10 @@ A model with the three scale-arc keypoints (Version 3 on) is read on the dial fa
 and sweep come from the fitted dial, fraction_img keeps the image-plane reading and fit_rms
 the fit residual (gauge_reader.reading.perspective). A 4-keypoint model is read in the image.
 
+--tta reads each image upright and turned by +/- --tta-angle degrees: the value is the median of
+the three readings, and when they differ by more than --retake-spread % of the scale the row is
+declined with status retake (see gauge_reader.predict). Three model passes per image.
+
 --pad adds a grey margin around each test image, because the synthetic training images
 show the gauge with background around it while MeterFL crops fill the frame (use --pad 0
 for synthetic images). --overlay DIR saves each image with the predicted keypoints drawn.
@@ -30,7 +34,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from gauge_reader.predict import median_ms, read_rows, write_records
+from gauge_reader.predict import (
+    RETAKE_SPREAD,
+    TTA_ANGLE,
+    median_ms,
+    read_rows,
+    read_rows_tta,
+    write_records,
+)
 
 
 def main(argv=None) -> None:
@@ -47,6 +58,10 @@ def main(argv=None) -> None:
     ap.add_argument("--clip", type=float, default=0.1,
                     help="clip the needle fraction to [-clip, 1+clip]; negative = no clipping")
     ap.add_argument("--overlay", type=Path, help="folder for images with predictions drawn")
+    ap.add_argument("--tta", action="store_true", help="rotation check: median of 3 readings + RETAKE")
+    ap.add_argument("--tta-angle", type=float, default=TTA_ANGLE)
+    ap.add_argument("--retake-spread", type=float, default=RETAKE_SPREAD,
+                    help="with --tta: decline (retake) above this spread, %% of scale; negative = never")
     a = ap.parse_args(argv)
 
     from ultralytics import YOLO
@@ -54,9 +69,14 @@ def main(argv=None) -> None:
     model = YOLO(str(a.weights))
     with open(a.manifest, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
-    records, counts = read_rows(model, rows, imgsz=a.imgsz, conf=a.conf, pad=a.pad,
-                                device=a.device, overlay=a.overlay, min_sweep=a.min_sweep,
-                                clip=None if a.clip < 0 else a.clip, progress=50)
+    kw = {"imgsz": a.imgsz, "conf": a.conf, "pad": a.pad, "device": a.device, "overlay": a.overlay,
+          "min_sweep": a.min_sweep, "clip": None if a.clip < 0 else a.clip, "progress": 50}
+    if a.tta:
+        records, counts = read_rows_tta(model, rows, angle=a.tta_angle,
+                                        retake_spread=None if a.retake_spread < 0 else a.retake_spread,
+                                        **kw)
+    else:
+        records, counts = read_rows(model, rows, **kw)
     write_records(records, a.out)
     ms = median_ms(records)
     print(f"{len(records)} rows -> {a.out}  " + ", ".join(f"{k} {v}" for k, v in counts.items() if v)
