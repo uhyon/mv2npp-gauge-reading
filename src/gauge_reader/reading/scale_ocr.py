@@ -265,6 +265,29 @@ class RapidOcr:
                 self.engine.text_detector.preprocess_op[0].limit_side_len = det_side
             except (AttributeError, IndexError):   # other package layout: keep the default
                 pass
+        self._no_spinning()
+
+    def _no_spinning(self) -> None:
+        """Rebuild the onnxruntime sessions with thread spin-waiting off. With it on, the OCR
+        threads keep spinning after each call and slow the next pose-model pass: on a PC CPU
+        detection took 530–850 ms after OCR against 61 ms without (2026-11-17)."""
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            return
+        for part in vars(self.engine).values():
+            for name, holder in (vars(part).items() if hasattr(part, "__dict__") else []):
+                sess = getattr(holder, "session", None)
+                path = getattr(sess, "_model_path", None)
+                if not isinstance(sess, ort.InferenceSession) or not path:
+                    continue
+                so = ort.SessionOptions()
+                so.log_severity_level = 4
+                so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                so.add_session_config_entry("session.intra_op.allow_spinning", "0")
+                so.add_session_config_entry("session.inter_op.allow_spinning", "0")
+                holder.session = ort.InferenceSession(path, sess_options=so,
+                                                      providers=sess.get_providers())
 
     def __call__(self, img) -> list[TextBox]:
         res, _ = self.engine(img)
