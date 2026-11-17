@@ -102,8 +102,6 @@ def read_rows(model, rows: list[dict], *, imgsz: int = 640, conf: float = 0.1, p
         img = cv2.imread(str(row["image"]), cv2.IMREAD_COLOR)
         if img is None:
             rec["status"] = "unreadable"
-        elif lo is None or hi is None:
-            rec["status"] = "no_range"
         else:
             if transform is not None:
                 img = transform(img, row)
@@ -136,9 +134,12 @@ def read_rows(model, rows: list[dict], *, imgsz: int = 640, conf: float = 0.1, p
                     rec["status"] = "bad_geometry"
                 else:
                     raw = d.fraction()
-                    frac = raw if clip is None else min(max(raw, -clip), 1.0 + clip)
-                    rec.update(value=f"{lo + frac * (hi - lo):.6g}", pred_unit=row.get("unit", ""),
-                               fraction=f"{raw:.4f}")
+                    rec["fraction"] = f"{raw:.4f}"
+                    if lo is None or hi is None:   # keypoints kept for scale OCR
+                        rec["status"] = "no_range"
+                    else:
+                        frac = raw if clip is None else min(max(raw, -clip), 1.0 + clip)
+                        rec.update(value=f"{lo + frac * (hi - lo):.6g}", pred_unit=row.get("unit", ""))
                 if overlay:
                     text = f"{rec['value'] or '?'} {row.get('unit', '')} conf {d.box_conf:.2f}"
                     cv2.imwrite(str(overlay / f"{row['id']}.jpg"), draw(img, d, text))

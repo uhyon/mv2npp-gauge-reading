@@ -57,7 +57,7 @@ def _rows(tmp_path):
 
 
 def test_read_rows_checks_and_padding(tmp_path):
-    model = FakeModel([(270, 0.5), (40, 0.5), (270, 1.12)])
+    model = FakeModel([(270, 0.5), (40, 0.5), (270, 1.12), (270, 0.3)])
     calls = []
     recs, counts = read_rows(model, _rows(tmp_path), pad=0.15,
                              transform=lambda img, row: calls.append(row["id"]) or img)
@@ -70,9 +70,10 @@ def test_read_rows_checks_and_padding(tmp_path):
     assert float(r["past_max"]["value"]) == pytest.approx(11.0)          # clipped to 1.1
     assert float(r["past_max"]["fraction"]) == pytest.approx(1.12, abs=1e-3)
     assert r["no_range"]["status"] == "no_range" and r["missing"]["status"] == "unreadable"
+    assert r["no_range"]["value"] == "" and float(r["no_range"]["fraction"]) == pytest.approx(0.3, abs=1e-3)
     assert counts == {"ok": 2, "no_range": 1, "no_detection": 0, "unreadable": 1, "bad_geometry": 1,
                       "retake": 0}
-    assert calls == ["ok", "collapsed", "past_max"]
+    assert calls == ["ok", "collapsed", "past_max", "no_range"]   # no range: keypoints kept for OCR
 
 
 def test_read_rows_without_clip(tmp_path):
