@@ -260,9 +260,9 @@ the stretch resize) stands in for it, so "% of scale" below is comparable to % F
 | model time, work PC CPU | 85 ms | 236 ms | 91 ms |
 
 The centre and the needle tip are found well; the scale end points are the weak keypoints
-(within 5% of the gauge size for only 29–42%), as on MeterFL and MeasureBench. Part of that is
-the labels: a v4tii Min/Max point marks the end tick, often at its inner end, while our renders
-put the point on the scale arc. The needle fraction still lands within 5% of scale for 93% of
+(within 5% of the gauge size for only 29–42%), as on MeterFL and MeasureBench. Part of that may
+be the labels: a v4tii Min/Max point marks the end tick, which may sit at a different radius
+than the point on the scale arc that our renders label (not checked image by image yet). The needle fraction still lands within 5% of scale for 93% of
 gauges, because an end point that is off along its own ray does not change the angle. A few
 gross errors pull the mean up: the 5 worst Version 3 gauges are off by 50–93% of scale with a
 good box (IoU 0.71–0.95), so the needle or the scale ends were read the wrong way round. Image-
@@ -278,6 +278,6 @@ MeterFL crops, already show background around the gauge. Version 4 is again no b
 | v4tii, 326 images, 344 Gauge boxes | 0.970 / 0.746 | 0.965 / 0.725 | 0.997 / 0.962 |
 
 A model trained only on renders finds about 95% of the real gauges at 97% precision. The low
-obaw9 AP50-95 reflects the box definition rather than misses: the `meter` polygon is drawn
-around a part of the gauge that differs from our box (the v4tii Gauge boxes, drawn like ours,
-give 0.75), so only IoU 0.5 is meaningful there.
+obaw9 AP50-95 (v4tii Gauge boxes give 0.75) most likely comes from the box definition, the
+`meter` polygon outlining a different part of the gauge than our box, rather than from misses;
+until that is checked on overlays, only AP50 is used for obaw9.
