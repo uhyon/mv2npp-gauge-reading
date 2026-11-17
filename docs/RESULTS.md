@@ -364,3 +364,53 @@ thermometer) and extrapolated lines (−40–90 for 0–50 inH2O). The rotation 
 the damage: the read images reach 1.86% FS mean. OCR on the PC CPU (about 400 ms) is the
 slowest stage, so the full pipeline is about 0.6 s per image; speeding OCR up (smaller
 detector input, recognition only on boxes near the scale) is open.
+
+## End to end: `GaugeReader.read(photo)` (2026-11-17)
+
+`gauge_reader.reader.GaugeReader` runs all stages on one photo and returns value, unit,
+status and alarm (LOW / HIGH / NORMAL with a band, RETAKE when no value is given);
+`scripts/read_gauge.py` reads single photos (JSON lines) or a manifest (predictions CSV for
+`evaluate.py`). Detection runs on the photo with a 15% grey margin; when the box covers at
+least 40% of the photo that pass is also the upright keypoint pass, otherwise the box (plus 5%)
+is cropped and read again. Turned ±25° passes, the 5% spread RETAKE and OCR follow. Reading a
+close-up through a crop of its own box instead let 2–5x more MeterFL photos fall to RETAKE
+(the framing matters), so close-ups are read whole. OCR skips the text-angle classifier
+(dial numbers are upright): 225 → 171 ms per image in the container with the same ranges.
+
+| MeterFL, 262, Version 3 | coverage | mean / median % FS | ≤2% FS: read / all | time per image (container) |
+| --- | ---: | ---: | ---: | ---: |
+| GT range (needle only) | 91% | 2.12 / 0.97 | 80% / 73% | 392 ms |
+| OCR range (full pipeline) | 83% | 1.88 / 0.95 | 81% / 67% | 603 ms |
+
+Declined: 22 RETAKE, 22 no OCR range, 1 no gauge. On the read photos the full pipeline meets
+the ER-01 mean (≤ 2% FS) but not the 85% share within 2% FS.
+
+MeasureBench (142 photos, Version 3, PC CPU, 12 cores):
+
+| MeasureBench, 142 | coverage | mean / median % FS (labelled) | ≤2% FS: read / all | interval hit: read / all | time per image (PC) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GT range (needle only) | 13% | 3.96 / 1.36 | 67% / 29% | 33% / 4% | 332 ms |
+| OCR range (full pipeline) | 44% | 2.68 / 2.03 | 44% / 17% | 29% / 13% | 431 ms |
+| earlier: OCR + rotation check on the whole photo | 42% | 1.86 / 1.47 | 67% / – | 33% / 14% | – |
+
+Declined (full pipeline): 56 RETAKE, 15 no gauge, 9 no OCR range. PC time per stage (median):
+detection 60 ms, three keypoint passes 270 ms, OCR 297 ms (OCR runs only on photos that pass
+the RETAKE check, so the total median is 431 ms). Before 472318c the onnxruntime threads of OCR
+kept spin-waiting after each call and the next detection took 530–850 ms instead of 60 ms;
+the OCR sessions are now built with spinning off (same outputs, 818 → 431 ms per photo).
+
+Most MeasureBench photos show a small gauge in a wider scene: of the 42 with a labelled range,
+30 are read through a crop of the box and 8 whole. On the whole-image rows the readings are
+identical to the earlier run. On the crops the needle fraction moves by a median 2.15% of
+scale; 4 photos newly fall to RETAKE (boxes of 6–12% of the photo, read as small upscaled
+patches) while 3 earlier RETAKEs are now read, so the RETAKE count on crops is about the same
+(14 vs 15). On the 12 photos read by both, mean / median 2.21 / 1.88 vs 1.79 / 1.50% FS. The
+crop framing of small gauges is the open question; the MeterFL set, all close-ups, does not
+test it.
+
+Synthetic val, 300 photos (OCR checked on its own with `ocr_scale.py`): a range is given for
+56% (156 of the 167 given are right), median OCR 218 ms. The misses follow the synthetic
+degradations, not the dial size: no range on 90% of motion-blurred photos, 69% defocus, 56% low
+light, against 21% with no degradation. Many blurred dials yield no text at all, even at a
+135–155 px radius. Range by OCR therefore needs a sharp photo; for a known instrument the range
+is given and only the needle is read.
