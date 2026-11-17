@@ -13,20 +13,6 @@ def _load(name):
     return mod
 
 
-def test_combine_median_and_spread():
-    tta = _load("rotation_tta")
-    rows = [{"id": "a", "scale_min": "0", "scale_max": "10", "unit": "bar"},
-            {"id": "b", "scale_min": "0", "scale_max": "10", "unit": "bar"}]
-    up = [{"status": "ok", "fraction": "0.50", "value": "5"}, {"status": "no_detection"}]
-    plus = [{"status": "ok", "fraction": "0.52"}, {"status": "ok", "fraction": "0.3"}]
-    minus = [{"status": "ok", "fraction": "1.40"}, {"status": "no_detection"}]
-    a, b = tta.combine(rows, [up, plus, minus])
-    assert a["frac_m"] == "1.1000"          # clipped
-    assert float(a["value"]) == 5.2         # median of 0.50, 0.52, 1.10
-    assert float(a["spread"]) == 60.0
-    assert b["spread"] == "99" and float(b["value"]) == 3.0
-
-
 def test_retake_table():
     rt = _load("retake_table")
     s = np.array([1, 2, 9, 12.0])

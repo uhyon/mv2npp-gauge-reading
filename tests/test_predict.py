@@ -70,7 +70,8 @@ def test_read_rows_checks_and_padding(tmp_path):
     assert float(r["past_max"]["value"]) == pytest.approx(11.0)          # clipped to 1.1
     assert float(r["past_max"]["fraction"]) == pytest.approx(1.12, abs=1e-3)
     assert r["no_range"]["status"] == "no_range" and r["missing"]["status"] == "unreadable"
-    assert counts == {"ok": 2, "no_range": 1, "no_detection": 0, "unreadable": 1, "bad_geometry": 1}
+    assert counts == {"ok": 2, "no_range": 1, "no_detection": 0, "unreadable": 1, "bad_geometry": 1,
+                      "retake": 0}
     assert calls == ["ok", "collapsed", "past_max"]
 
 
@@ -78,3 +79,31 @@ def test_read_rows_without_clip(tmp_path):
     rows = _rows(tmp_path)[2:3]
     recs, _ = read_rows(FakeModel([(270, 1.12)]), rows, pad=0, clip=None)
     assert float(recs[0]["value"]) == pytest.approx(11.2, abs=1e-3)
+
+
+def test_combine_tta_median_spread_and_retake():
+    from gauge_reader.predict import combine_tta
+    rows = [{"id": i, "scale_min": "0", "scale_max": "10", "unit": "bar"} for i in "abc"]
+    up = [{"status": "ok", "fraction": "0.50", "value": "5", "ms": "10"},
+          {"status": "ok", "fraction": "0.50", "value": "5"}, {"status": "no_detection", "value": ""}]
+    plus = [{"status": "ok", "fraction": "0.52", "ms": "11"}, {"status": "ok", "fraction": "0.60"},
+            {"status": "ok", "fraction": "0.3"}]
+    minus = [{"status": "ok", "fraction": "0.49", "ms": "12"}, {"status": "ok", "fraction": "1.40"},
+             {"status": "no_detection"}]
+    a, b, c = combine_tta(rows, [up, plus, minus])
+    assert a["status"] == "ok" and float(a["value"]) == 5.0 and float(a["spread"]) == 3.0
+    assert a["ms"] == "33.0" and a["value_0"] == "5"
+    assert b["frac_m"] == "1.1000"                       # clipped
+    assert b["status"] == "retake" and b["value"] == "" and float(b["value_median"]) == 6.0
+    assert c["status"] == "no_detection" and c["value"] == ""
+    (b2,) = combine_tta(rows[1:2], [up[1:2], plus[1:2], minus[1:2]], retake_spread=None)
+    assert b2["status"] == "ok" and float(b2["value"]) == 6.0
+
+
+def test_read_rows_tta_turns_images(tmp_path):
+    from gauge_reader.predict import read_rows_tta
+    rows = _rows(tmp_path)[:1]
+    model = FakeModel([(270, 0.5), (270, 0.51), (270, 0.49)])
+    recs, counts = read_rows_tta(model, rows, pad=0)
+    assert counts["ok"] == 1 and float(recs[0]["value"]) == pytest.approx(5.0, abs=1e-3)
+    assert float(recs[0]["spread"]) == pytest.approx(2.0, abs=0.01)

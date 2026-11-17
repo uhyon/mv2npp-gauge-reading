@@ -281,3 +281,33 @@ A model trained only on renders finds about 95% of the real gauges at 97% precis
 obaw9 AP50-95 (v4tii Gauge boxes give 0.75) most likely comes from the box definition, the
 `meter` polygon outlining a different part of the gauge than our box, rather than from misses;
 until that is checked on overlays, only AP50 is used for obaw9.
+
+## Rotation check and RETAKE (Version 3, 2026-11-17)
+
+`predict_readings.py --tta` reads each image upright and turned by ±25°. A reading does not
+change when the photo is turned, so the value is the median of the three, and their spread
+(max − min needle fraction, % of scale) says how sure the model is. Above 5% the reader
+declines with status `retake` and asks for another photo.
+
+First candidate, rejected: a predicted scale arc over 285°. On MeterFL it flags exactly the 10
+dials turned by 90°+ (all over 10% FS error), but the generator only makes 180–270° arcs, so it
+never fires on the synthetic split, and on real sets it misses most large errors (MeasureBench
+4 of 18) and flags real 270–300° dials that read fine (v4tii: 13 of 15 flagged were within 10%).
+
+| Version 3 | MeterFL (262) | MeasureBench (38 read) | Synthetic val (2,000) |
+| --- | ---: | ---: | ---: |
+| upright: mean / median % FS / ≤2% | 2.83 / 1.09 / 75% | 15.94 / 8.32 / 34% | 0.66 / 0.49 / 96% |
+| median of 3: mean / median / ≤2% | 2.44 / 0.99 / 77% | 15.02 / 5.65 / 34% | 0.59 / 0.44 / 97% |
+| Spearman(spread, error) | +0.38 | +0.70 | +0.29 |
+| flagged at spread > 5% | 9% | 55% | 1% |
+| large errors (>10% FS) caught at 5% | 7 of 14 | 14 of 18 | 2 of 2 |
+| kept after RETAKE at 5%: mean / median / ≤2% | 1.85 / 0.97 / 81% | 4.80 / 1.41 / 65% | 0.57 / 0.44 / 97% |
+| alternatives: flagged at 3% / 8% | 20% / 4% | 71% / 42% | 6% / 0.4% |
+
+The kept rows use the median reading. The spread follows the error far better than keypoint
+confidence (Spearman −0.17 on MeterFL, Version 1) or the dial-fit residual `fit_rms` (−0.15).
+At 3% the kept MeterFL images reach the ER-01 share (1.60% FS, 85% within 2%) but a fifth of
+the photos are sent back; 5% was chosen as the balance for a field round. MeasureBench is sent
+back more often because many of its dials are designs the generator does not make. The check
+costs three model passes (MeterFL in the cloud container: 342 ms per image; about 240 ms
+expected on the work PC).
