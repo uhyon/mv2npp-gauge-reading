@@ -343,3 +343,24 @@ largest needle errors too, so the read images get better than with the GT range.
 rotation check as well, the read images reach 1.24% FS mean (ER-01: ≤ 2%) at 82% coverage.
 Units: MeterFL dials print "MPa" or "kPa" on 138 images; on the other 124 (mostly the 0–0.1 MPa
 video gauge, where the OCR sees "Pa") no unit is read and the label unit is assumed.
+
+MeasureBench (142 images, run on the work PC; OCR on a crop of 1.6 scale radii around the
+predicted centre). Rows without a hand-labelled range now keep their keypoints, so OCR gives a
+value for any detected dial and the interval hit can be scored on all 142:
+
+| MeasureBench, Version 3 | GT range (42 labelled) | OCR range | OCR range + rotation check |
+| --- | ---: | ---: | ---: |
+| OCR range given / correct of the 42 labelled | – | 30 / 14 | same |
+| coverage, all 142 | 27% | 75% | 42% |
+| interval hit: read / all 142 | 24% / 6% | 24% / 18% | 33% / 14% |
+| % FS on labelled images read: mean / median / ≤2% | 15.94 / 8.32 / 34% | 26.50 / 2.82 / 43% | 1.86 / 1.47 / 67% |
+| OCR time, work PC CPU | – | 397 ms | 426 ms |
+
+MeasureBench is far harder for OCR than MeterFL. Of the 16 wrong ranges among the labelled
+images, 8 are tyre gauges labelled 3–60 or 4–100 psi (the hand labels take the first tick, the
+dial prints 0 or no number there) that OCR reads as 0–60 / 0–100; the rest are dials with two
+scale rings (inner bar ring mixed with the outer psi ring, a hygrometer % ring read as the
+thermometer) and extrapolated lines (−40–90 for 0–50 inH2O). The rotation check removes most of
+the damage: the read images reach 1.86% FS mean. OCR on the PC CPU (about 400 ms) is the
+slowest stage, so the full pipeline is about 0.6 s per image; speeding OCR up (smaller
+detector input, recognition only on boxes near the scale) is open.
