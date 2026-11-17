@@ -22,7 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from gauge_reader.units import convert, flatten, norm_unit, unit_kind  # noqa: E402
+from gauge_reader.units import convert, flatten, norm_unit, unit_kind
 
 # Dial counts in real_world (2026-11-10): pressure_gauge 118, thermometer 31, sphygmomanometer 21.
 # sphygmomanometer (aneroid, usually a metal-capsule mechanism; only the dial looks like a

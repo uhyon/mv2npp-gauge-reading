@@ -98,6 +98,17 @@ model `fraction` and `sweep` come from the dial-face fit, `fraction_img` keeps t
 reading for comparison, and `fit_rms` is the fit residual as a share of the scale radius: how
 well the points agree with a round dial, a candidate RETAKE signal.
 
+### Keypoints (Roboflow v4tii) and detection (Roboflow obaw9)
+
+Both sets come from `scripts/download_data.py --roboflow` (in `data/raw/roboflow/`). Neither has
+a reading ground truth: v4tii scores the keypoints and the needle fraction they give, obaw9 the
+gauge box (see `scripts/eval_roboflow.py` for the metrics and the stretch correction).
+
+```bash
+uv run python scripts/eval_roboflow.py keypoints --weights runs/pose/base/weights/best.pt --out runs/pose/base/v4tii
+uv run python scripts/eval_roboflow.py detection --weights runs/pose/base/weights/best.pt --out runs/pose/base/obaw9
+```
+
 ## 3. Robustness to field conditions (ER-05)
 
 `scripts/robustness.py` reads the same test set clean and under each degradation of the

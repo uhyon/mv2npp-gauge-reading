@@ -163,7 +163,7 @@ So Version 3 rotates by up to ±30° only (`--degrees 30`, the default from now 
 renders' own roll of up to 15°. Field photos of a round are taken upright; a dial turned by 90°
 or more is left to RETAKE.
 
-## Version 3 (next): reading on the dial face
+## Version 3 (2026-11-16): reading on the dial face
 
 Three more keypoints on the scale arc, at 25, 50 and 75% of the scale (7 in all), computed for
 the existing synthetic set from its stored homographies (`scripts/arc_labels.py`, run by
@@ -183,3 +183,101 @@ to the Version 1 keypoint error:
 
 The fit residual (`fit_rms`, as a share of the scale radius) tells how well the points agree
 with a round dial; it is a candidate RETAKE signal, which keypoint confidence is not.
+
+### Version 3 results
+
+yolo11s-pose, 7 keypoints, rotation ±30°, 50 epochs on Kaggle (T4 x2, 2 h 27 min), run name `arc`.
+
+| | Version 1 | Version 3 |
+| --- | ---: | ---: |
+| MeterFL mean % FS (262) | 2.93 | 2.83 |
+| MeterFL median % FS | 1.29 | 1.09 |
+| MeterFL within 2% FS | 68% | 74% |
+| MeterFL without the 9 dials turned 90°+: mean / within 2% | 1.87 / 70% | 1.77 / 77% |
+| Synthetic val mean % FS (2,000, no margin) | 2.00 | 0.66 |
+| Synthetic val within 2% FS | 65% | 96% |
+| Synthetic val, tilt 0–20° / 20–40° / 40°+ | 0.53 / – / 3.37 | 0.49 / 0.62 / 0.79 |
+| MeasureBench (38 read of 42 ranged): mean / median % FS | 18.41 / 11.11 | 15.94 / 8.32 |
+| MeasureBench within 2% FS / interval hit | 21% / 16% | 34% / 24% |
+
+On the synthetic val split the dial-face fit removes almost all of the tilt error, as the
+simulation predicted; reading the same Version 3 keypoints with image-plane angles
+(`fraction_img`) gives 1.91% FS, so the gain comes from the fit, not from better keypoints.
+On MeterFL, where most photos are frontal, the dial-face reading and the image-plane reading
+are about equal (2.83 vs 2.74% FS), and the gain over Version 1 is small. The scale end points
+stay at the dial edge (scale-min distance / needle length 1.10), unlike Version 2. The same 9
+MeterFL dials turned by 90° or more still fail and make 39% of the total error; they are left
+to RETAKE. The fit residual `fit_rms` hardly tracks the error (Spearman −0.15 on MeterFL, 0.15 on
+synthetic val), so it is not a RETAKE signal on its own.
+
+
+## Version 4 (2026-11-17): larger model
+
+Same as Version 3 with yolo11m-pose instead of yolo11s-pose (run name `arc_m`), 50 epochs on
+Kaggle (T4 x2, 4 h 40 min). Final synthetic val pose loss 0.0131 (Version 3: 0.0152).
+
+| | Version 3 (11s) | Version 4 (11m) |
+| --- | ---: | ---: |
+| MeterFL mean / median % FS (262) | 2.83 / 1.09 | 2.69 / 1.35 |
+| MeterFL within 2% FS | 74% | 77% |
+| MeterFL without the 9 dials turned 90°+: mean / within 2% | 1.77 / 77% | 1.67 / 80% |
+| Synthetic val mean / median % FS | 0.66 / 0.49 | 0.75 / 0.55 |
+| Synthetic val within 2% FS | 96% | 95% |
+| Synthetic val, tilt 0–20° / 20–40° / 40°+ | 0.49 / 0.62 / 0.79 | 0.56 / 0.71 / 0.89 |
+| MeasureBench read (of 42 ranged) | 38 | 41 |
+| MeasureBench mean / median % FS | 15.94 / 8.32 | 13.34 / 4.48 |
+| MeasureBench within 2% FS / interval hit (read images) | 34% / 24% | 39% / 27% |
+| Model time per image, work PC CPU (i5-12400), synthetic val | 79 ms | 237 ms |
+
+The larger model does not change the main result. On MeterFL the paired difference in mean
+error is −0.16% FS with a bootstrap 95% interval of [−0.44, +0.08]; 55 images got better and
+58 worse by more than 1% FS. It reads the 0–0.1 MPa video gauge better (1.82 → 1.45% FS, 123
+images) but the 0–25 MPa gauge worse (1.13 → 1.98% FS, 48 images, about 1.5% FS low on
+average). On synthetic val it is slightly worse at every tilt. MeasureBench improves, mostly
+on the 3–60 psi dials (7 images, 13.56 → 3.02% FS), and it finds 3 more gauges, but only about
+40 images are scored. The 9 MeterFL dials turned by 90°+ still fail, and `fit_rms` still does
+not track the error (Spearman 0.04 on MeterFL). Both models meet the 0.5 s target, but Version 4
+is three times slower. Version 3 stays the default; the remaining real-photo error looks like a
+data gap (dial designs and orientations the generator does not make), not a capacity limit.
+
+## Keypoints (Roboflow v4tii) and detection (Roboflow obaw9), Versions 3 and 4
+
+Run with `scripts/eval_roboflow.py` on the work PC (2026-11-17), no margin unless stated. These
+sets have no reading ground truth: the needle fraction from the labelled points (after undoing
+the stretch resize) stands in for it, so "% of scale" below is comparable to % FS.
+
+**Keypoints, v4tii** (326 originals, 344 labelled gauges, 339 with all four points):
+
+| | Version 3 | Version 4 | Version 3, margin 15% |
+| --- | ---: | ---: | ---: |
+| gauges detected (box IoU ≥ 0.3) | 333 (97%) | 326 (95%) | 335 (97%) |
+| centre: median error / within 5% of gauge size | 1.4% / 96% | 1.5% / 97% | 1.6% / 96% |
+| needle tip | 2.7% / 70% | 2.7% / 73% | 2.6% / 76% |
+| scale min | 5.5% / 42% | 5.5% / 41% | 5.9% / 36% |
+| scale max | 6.3% / 29% | 6.7% / 25% | 6.4% / 28% |
+| needle fraction, image plane: mean / median / ≤2% / ≤5% | 3.00 / 1.22 / 70% / 93% | 3.84 / 1.34 / 65% / 92% | 5.02 / 1.42 / 63% / 89% |
+| needle fraction, dial face | 3.13 / 1.42 / 67% / 92% | 3.97 / 1.24 / 66% / 92% | 5.12 / 1.43 / 64% / 89% |
+| model time, work PC CPU | 85 ms | 236 ms | 91 ms |
+
+The centre and the needle tip are found well; the scale end points are the weak keypoints
+(within 5% of the gauge size for only 29–42%), as on MeterFL and MeasureBench. Part of that may
+be the labels: a v4tii Min/Max point marks the end tick, which may sit at a different radius
+than the point on the scale arc that our renders label (not checked image by image yet). The needle fraction still lands within 5% of scale for 93% of
+gauges, because an end point that is off along its own ray does not change the angle. A few
+gross errors pull the mean up: the 5 worst Version 3 gauges are off by 50–93% of scale with a
+good box (IoU 0.71–0.95), so the needle or the scale ends were read the wrong way round. Image-
+plane and dial-face readings agree here (most v4tii photos are near frontal, and the stretch
+correction already assumes it). A margin does not help on these photos, which, unlike the
+MeterFL crops, already show background around the gauge. Version 4 is again no better.
+
+**Detection**: AP of the gauge box, all detections down to conf 0.001.
+
+| | Version 3: AP50 / AP50-95 | Version 4 | Version 3 precision / recall at conf 0.25 |
+| --- | ---: | ---: | ---: |
+| obaw9, 1,471 images, 1,461 `meter` boxes | 0.955 / 0.391 | 0.953 / 0.403 | 0.969 / 0.948 |
+| v4tii, 326 images, 344 Gauge boxes | 0.970 / 0.746 | 0.965 / 0.725 | 0.997 / 0.962 |
+
+A model trained only on renders finds about 95% of the real gauges at 97% precision. The low
+obaw9 AP50-95 (v4tii Gauge boxes give 0.75) most likely comes from the box definition, the
+`meter` polygon outlining a different part of the gauge than our box, rather than from misses;
+until that is checked on overlays, only AP50 is used for obaw9.
