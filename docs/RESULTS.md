@@ -239,3 +239,45 @@ on the 3–60 psi dials (7 images, 13.56 → 3.02% FS), and it finds 3 more gaug
 not track the error (Spearman 0.04 on MeterFL). Both models meet the 0.5 s target, but Version 4
 is three times slower. Version 3 stays the default; the remaining real-photo error looks like a
 data gap (dial designs and orientations the generator does not make), not a capacity limit.
+
+## Keypoints (Roboflow v4tii) and detection (Roboflow obaw9), Versions 3 and 4
+
+Run with `scripts/eval_roboflow.py` on the work PC (2026-11-17), no margin unless stated. These
+sets have no reading ground truth: the needle fraction from the labelled points (after undoing
+the stretch resize) stands in for it, so "% of scale" below is comparable to % FS.
+
+**Keypoints, v4tii** (326 originals, 344 labelled gauges, 339 with all four points):
+
+| | Version 3 | Version 4 | Version 3, margin 15% |
+| --- | ---: | ---: | ---: |
+| gauges detected (box IoU ≥ 0.3) | 333 (97%) | 326 (95%) | 335 (97%) |
+| centre: median error / within 5% of gauge size | 1.4% / 96% | 1.5% / 97% | 1.6% / 96% |
+| needle tip | 2.7% / 70% | 2.7% / 73% | 2.6% / 76% |
+| scale min | 5.5% / 42% | 5.5% / 41% | 5.9% / 36% |
+| scale max | 6.3% / 29% | 6.7% / 25% | 6.4% / 28% |
+| needle fraction, image plane: mean / median / ≤2% / ≤5% | 3.00 / 1.22 / 70% / 93% | 3.84 / 1.34 / 65% / 92% | 5.02 / 1.42 / 63% / 89% |
+| needle fraction, dial face | 3.13 / 1.42 / 67% / 92% | 3.97 / 1.24 / 66% / 92% | 5.12 / 1.43 / 64% / 89% |
+| model time, work PC CPU | 85 ms | 236 ms | 91 ms |
+
+The centre and the needle tip are found well; the scale end points are the weak keypoints
+(within 5% of the gauge size for only 29–42%), as on MeterFL and MeasureBench. Part of that is
+the labels: a v4tii Min/Max point marks the end tick, often at its inner end, while our renders
+put the point on the scale arc. The needle fraction still lands within 5% of scale for 93% of
+gauges, because an end point that is off along its own ray does not change the angle. A few
+gross errors pull the mean up: the 5 worst Version 3 gauges are off by 50–93% of scale with a
+good box (IoU 0.71–0.95), so the needle or the scale ends were read the wrong way round. Image-
+plane and dial-face readings agree here (most v4tii photos are near frontal, and the stretch
+correction already assumes it). A margin does not help on these photos, which, unlike the
+MeterFL crops, already show background around the gauge. Version 4 is again no better.
+
+**Detection**: AP of the gauge box, all detections down to conf 0.001.
+
+| | Version 3: AP50 / AP50-95 | Version 4 | Version 3 precision / recall at conf 0.25 |
+| --- | ---: | ---: | ---: |
+| obaw9, 1,471 images, 1,461 `meter` boxes | 0.955 / 0.391 | 0.953 / 0.403 | 0.969 / 0.948 |
+| v4tii, 326 images, 344 Gauge boxes | 0.970 / 0.746 | 0.965 / 0.725 | 0.997 / 0.962 |
+
+A model trained only on renders finds about 95% of the real gauges at 97% precision. The low
+obaw9 AP50-95 reflects the box definition rather than misses: the `meter` polygon is drawn
+around a part of the gauge that differs from our box (the v4tii Gauge boxes, drawn like ours,
+give 0.75), so only IoU 0.5 is meaningful there.
