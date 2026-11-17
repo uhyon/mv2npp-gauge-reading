@@ -311,3 +311,35 @@ the photos are sent back; 5% was chosen as the balance for a field round. Measur
 back more often because many of its dials are designs the generator does not make. The check
 costs three model passes (MeterFL in the cloud container: 342 ms per image; about 240 ms
 expected on the work PC).
+
+## Scale OCR (stage 4, FR-07), 2026-11-17
+
+`scripts/ocr_scale.py` reads the numbers on the dial with rapidocr-onnxruntime (PP-OCRv3 models
+shipped with the package, CPU) and places each number on the scale by its angle around the
+predicted centre, on the dial face when the arc keypoints give a fit
+(`gauge_reader.reading.scale_ocr`). A RANSAC line value = a + b × fraction through the numbers
+gives the range at fraction 0 and 1, snapped to a printed label or the label grid; at least 3
+distinct labels must lie on it, otherwise no range is given (`no_scale`). Two OCR habits are
+handled: a dropped decimal point ("08" read for 0.8, "16" for 1.6: each whole number also
+tries its decimal versions, the line decides) and a lost superscript ("Kg/cm" → kgf/cm²). A
+lone "Pa" is not taken as a unit, since it is nearly always "MPa" or "kPa" with the prefix
+missed. Keypoints from Version 3.
+
+| MeterFL, 262 images | GT range (needle only) | OCR range | OCR range + rotation check (RETAKE 5%) |
+| --- | ---: | ---: | ---: |
+| range given | – | 235 (90%) | 235 (90%) |
+| range correct (both ends within 1% of span) | – | 233 of 235 given (99%); 233 of 262 (89%) | same |
+| unit read / correct | – | 138 / 138 | same |
+| coverage | 100% | 90% | 82% |
+| mean / median % FS of read images | 2.83 / 1.09 | 1.78 / 1.09 | 1.24 / 0.97 |
+| within 2% FS: read / all images | 74% / 74% | 76% / 68% | 81% / 66% |
+| model time per image (cloud container) | – | OCR 208 ms | 342 + 208 ms |
+
+When OCR gives a range it is almost always right: the 2 wrong ranges are a dial turned by 90°+
+(keypoints wrong, so the numbers land on the wrong fractions) and one read as −5–25 instead
+of 0–25. The images without a range are mostly one 0–10 MPa gauge (17 of 26) whose small scale
+numbers the OCR does not detect, even at twice the size. Declining those removes several of the
+largest needle errors too, so the read images get better than with the GT range. With the
+rotation check as well, the read images reach 1.24% FS mean (ER-01: ≤ 2%) at 82% coverage.
+Units: MeterFL dials print "MPa" or "kPa" on 138 images; on the other 124 (mostly the 0–0.1 MPa
+video gauge, where the OCR sees "Pa") no unit is read and the label unit is assumed.
