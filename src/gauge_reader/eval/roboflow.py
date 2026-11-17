@@ -281,6 +281,14 @@ def score_gauge(g: GaugeLabel, det) -> dict:
     gk, pk = scale_kp(g.keypoints(), sx, sy), scale_kp(det.keypoints, sx, sy)
     row["box_iou"] = iou(g.box, det.box)
     row["box_conf"] = det.box_conf
+    if hasattr(det, "sweep"):
+        try:
+            row["sweep"] = det.sweep()   # scale arc in degrees (dial face for arc models)
+        except ValueError:
+            pass
+    fit0 = det.dial_fit() if hasattr(det, "dial_fit") else None
+    if fit0 is not None:
+        row["fit_rms"] = fit0.rms
     for f in KP_FIELDS:
         row[f"err_{f}"] = _dist(getattr(gk, f), getattr(pk, f)) / size
     try:
