@@ -364,3 +364,23 @@ thermometer) and extrapolated lines (−40–90 for 0–50 inH2O). The rotation 
 the damage: the read images reach 1.86% FS mean. OCR on the PC CPU (about 400 ms) is the
 slowest stage, so the full pipeline is about 0.6 s per image; speeding OCR up (smaller
 detector input, recognition only on boxes near the scale) is open.
+
+## End to end: `GaugeReader.read(photo)` (2026-11-17)
+
+`gauge_reader.reader.GaugeReader` runs all stages on one photo and returns value, unit,
+status and alarm (LOW / HIGH / NORMAL with a band, RETAKE when no value is given);
+`scripts/read_gauge.py` reads single photos (JSON lines) or a manifest (predictions CSV for
+`evaluate.py`). Detection runs on the photo with a 15% grey margin; when the box covers at
+least 40% of the photo that pass is also the upright keypoint pass, otherwise the box (plus 5%)
+is cropped and read again. Turned ±25° passes, the 5% spread RETAKE and OCR follow. Reading a
+close-up through a crop of its own box instead let 2–5x more MeterFL photos fall to RETAKE
+(the framing matters), so close-ups are read whole. OCR skips the text-angle classifier
+(dial numbers are upright): 225 → 171 ms per image in the container with the same ranges.
+
+| MeterFL, 262, Version 3 | coverage | mean / median % FS | ≤2% FS: read / all | time per image (container) |
+| --- | ---: | ---: | ---: | ---: |
+| GT range (needle only) | 92% | 2.08 / 0.97 | 80% / 74% | 502 ms |
+| OCR range (full pipeline) | 83% | 1.88 / 0.95 | 81% / 67% | 603 ms |
+
+Declined: 22 RETAKE, 22 no OCR range, 1 no gauge. On the read photos the full pipeline meets
+the ER-01 mean (≤ 2% FS) but not the 85% share within 2% FS.

@@ -32,7 +32,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from gauge_reader.keypoints.yolo import ARC_NAMES, KP_NAMES, detections_from_arrays
-from gauge_reader.reading.scale_ocr import RapidOcr, read_scale
+from gauge_reader.reading.scale_ocr import RapidOcr, dial_crop, read_scale
 from gauge_reader.units import convert, norm_unit
 
 
@@ -50,21 +50,6 @@ def detection_from_pred(p: dict):
         return None
     (d,) = detections_from_arrays(np.zeros((1, 4)), np.ones(1), np.array([pts]))
     return d
-
-
-def dial_crop(img, kp, factor: float):
-    """The dial around the predicted centre, ``factor`` scale radii on each side (0 = whole image)."""
-    if factor <= 0:
-        return img, (0, 0)
-    cx, cy = kp.center
-    r = max(np.hypot(kp.scale_min[0] - cx, kp.scale_min[1] - cy),
-            np.hypot(kp.scale_max[0] - cx, kp.scale_max[1] - cy)) * factor
-    h, w = img.shape[:2]
-    x0, y0 = max(int(cx - r), 0), max(int(cy - r), 0)
-    x1, y1 = min(int(cx + r) + 1, w), min(int(cy + r) + 1, h)
-    if x1 - x0 < 16 or y1 - y0 < 16:
-        return img, (0, 0)
-    return img[y0:y1, x0:x1], (x0, y0)
 
 
 def same_unit(a: str, b: str) -> bool:
