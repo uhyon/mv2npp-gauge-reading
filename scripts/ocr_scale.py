@@ -15,7 +15,8 @@ unit), so evaluate.py scores the full reading. Columns ``ocr_min``, ``ocr_max``,
 ``range_ok`` (both ends within 1% of the true span) and ``unit_ok`` are added. A summary of the
 range and unit accuracy is printed. See gauge_reader.reading.scale_ocr. With predictions made
 by ``predict_readings.py --tta`` the needle fraction is the median of the three turned readings
-and rows with status retake stay declined.
+and rows whose spread is over --retake-spread (or with status retake) are declined, also those
+without a range in the manifest (predict_readings keeps their keypoints, status no_range).
 """
 
 from __future__ import annotations
@@ -51,6 +52,21 @@ def detection_from_pred(p: dict):
     return d
 
 
+def dial_crop(img, kp, factor: float):
+    """The dial around the predicted centre, ``factor`` scale radii on each side (0 = whole image)."""
+    if factor <= 0:
+        return img, (0, 0)
+    cx, cy = kp.center
+    r = max(np.hypot(kp.scale_min[0] - cx, kp.scale_min[1] - cy),
+            np.hypot(kp.scale_max[0] - cx, kp.scale_max[1] - cy)) * factor
+    h, w = img.shape[:2]
+    x0, y0 = max(int(cx - r), 0), max(int(cy - r), 0)
+    x1, y1 = min(int(cx + r) + 1, w), min(int(cy + r) + 1, h)
+    if x1 - x0 < 16 or y1 - y0 < 16:
+        return img, (0, 0)
+    return img[y0:y1, x0:x1], (x0, y0)
+
+
 def same_unit(a: str, b: str) -> bool:
     if not a or not b:
         return False
@@ -66,6 +82,10 @@ def main(argv=None) -> None:
     ap.add_argument("--pred", type=Path, required=True, help="predictions CSV with keypoint columns")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--clip", type=float, default=0.1)
+    ap.add_argument("--retake-spread", type=float, default=5.0,
+                    help="with --tta predictions: decline above this spread (%% of scale)")
+    ap.add_argument("--crop", type=float, default=1.6,
+                    help="OCR only the dial: this many scale radii around the centre (0 = whole image)")
     a = ap.parse_args(argv)
 
     with open(a.manifest, newline="", encoding="utf-8-sig") as f:
@@ -82,12 +102,19 @@ def main(argv=None) -> None:
         tta = [v for v in (_f(p.get(k)) for k in ("frac_0", "frac_p", "frac_m")) if v is not None]
         if tta:                      # predictions made with --tta: median of the turned readings
             frac = float(np.median(tta))
-        if p.get("status") == "retake":
+        spread = _f(p.get("spread"))
+        retake = p.get("status") == "retake" or (
+            spread is not None and a.retake_spread >= 0 and spread > a.retake_spread)
+        if retake:
             frac = None
+            rec["retake"] = 1
         if det is not None:
             img = cv2.imread(str(row["image"]), cv2.IMREAD_COLOR)
             t0 = time.perf_counter()
-            boxes = ocr(img) if img is not None else []
+            boxes = []
+            if img is not None:
+                crop, (dx, dy) = dial_crop(img, det.keypoints, a.crop)
+                boxes = [(t, [(x + dx, y + dy) for x, y in poly], c) for t, poly, c in ocr(crop)]
             rec["ocr_ms"] = f"{(time.perf_counter() - t0) * 1000:.1f}"
             s = read_scale(boxes, det.keypoints, det.dial_fit())
             rec.update(n_labels=len(s.labels), n_inliers=len(s.inliers), ocr_unit=s.unit,

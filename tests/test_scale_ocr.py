@@ -50,7 +50,9 @@ def test_find_unit():
     assert find_unit(["压力表", "MPa"]) == "MPa"
     assert find_unit(["Kg/cm", "MOTOR"]) == "kgf/cm2"
     assert find_unit(["Pa", "0.1"]) == ""          # prefix missed: ambiguous
-    assert find_unit(["C", "100"]) == ""           # a lone letter is not a unit
+    assert find_unit(["C", "100"]) == "°C"         # degree sign lost
+    assert find_unit(["C", "MPa"]) == "MPa"        # a printed unit wins over a lone letter
+    assert find_unit(["°℃"]) == "℃"
     assert find_unit(["°C"]) == "°C"
     assert find_unit(["0-60 psi"]) == "psi"
 
@@ -86,3 +88,10 @@ def test_fit_line_prefers_values_as_read():
     labels = labels_on_dial([box("2", 0.2), box("4", 0.4), box("6", 0.6), box("8", 0.8)], KP, None)
     a, b, _inl = fit_line(labels)
     assert a == pytest.approx(0, abs=1e-6) and b == pytest.approx(10)
+
+
+def test_decimal_line_needs_clearly_more_labels():
+    # a thermometer 0..100: the /10 line explains the same labels, the printed values win
+    boxes = [box(str(v), v / 100) for v in range(0, 101, 10)] + [box("-10", -0.1)]
+    s = read_scale(boxes, KP)
+    assert (s.scale_min, s.scale_max) == (0.0, 100.0)

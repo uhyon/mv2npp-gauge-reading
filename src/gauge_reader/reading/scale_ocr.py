@@ -82,19 +82,33 @@ def parse_number(text: str) -> tuple[float | None, str]:
 
 
 def find_unit(texts: Sequence[str]) -> str:
-    """First token that names a pressure or temperature unit (single letters need a degree sign)."""
+    """First token that names a pressure or temperature unit. A lone "C" or "F" (degree sign
+    lost) counts only when no other unit is printed."""
+    u = _find_unit(texts)
+    if u:
+        return u
+    for text in texts:
+        t = text.strip().replace("°", "").replace("º", "")
+        if t in ("C", "℃"):
+            return "°C"
+        if t in ("F", "℉"):
+            return "°F"
+    return ""
+
+
+def _find_unit(texts: Sequence[str]) -> str:
     for text in texts:
         for tok in [text, *re.split(r"[\s()\[\]]+", text)]:
             _, rest = parse_number(tok)
             for cand in (tok, rest):
                 if not cand:
                     continue
-                n = norm_unit(cand)
+                n = norm_unit(cand.replace("°℃", "℃").replace("°℉", "℉"))
                 n = TRUNCATED_UNITS.get(n, n)
                 if n == "pa":       # usually "MPa" or "kPa" with the prefix missed
                     continue
                 if n in UNIT_KIND and (len(n) > 1 or "°" in cand or "℃" in cand or "℉" in cand):
-                    return TRUNCATED_UNITS.get(norm_unit(cand), cand.strip())
+                    return TRUNCATED_UNITS.get(norm_unit(cand), cand.strip().replace("°℃", "℃"))
     return ""
 
 
@@ -128,8 +142,9 @@ def alternatives(text: str, value: float) -> list[float]:
     out = [value]
     digits = re.sub(r"\D", "", text.split(".")[0] if "." in text else text)
     if "." not in text and "," not in text and len(digits) >= 2 and not digits.startswith("0"):
+        sign = -1.0 if value < 0 else 1.0
         for k in range(1, len(digits)):
-            out.append(float(digits[:k] + "." + digits[k:]))
+            out.append(sign * float(digits[:k] + "." + digits[k:]))
     return list(dict.fromkeys(out))
 
 
@@ -172,13 +187,15 @@ def fit_line(labels: Sequence[Label], tol: float = INLIER_TOL,
                 if e <= tol and (lab.box not in per_box or e < per_box[lab.box][0]):
                     per_box[lab.box] = (e, lab)
             inl = [lab for _, lab in per_box.values()]
-            # distinct values only: the same number read twice is one label; prefer values as read
+            # distinct values only: the same number read twice is one label. A label read as
+            # printed counts more than one with a restored decimal point, so a decimal line wins
+            # only when it explains clearly more labels.
             k = len({round(lab.value, 9) for lab in inl})
             as_read = sum(lab.value == parse_number(lab.text)[0] for lab in inl)
-            score = (k, as_read, -sum(e for e, _ in per_box.values()))
+            score = (k + 0.5 * as_read, k, -sum(e for e, _ in per_box.values()))
             if best is None or score > best[0]:
                 best = (score, inl)
-    if best is None or best[0][0] < max(min_inliers, 2):
+    if best is None or best[0][1] < max(min_inliers, 2):
         return None
     inl = best[1]
     f = np.array([lab.fraction for lab in inl])
