@@ -470,3 +470,46 @@ MeterFL, 239 photos read (Version 3, registered range = the label):
 | wrong tag (each of the 17 other ranges of the set given instead), flagged | 98.7% of 3,689 pairs |
 
 The check adds the OCR time (container: 392 → 557 ms per photo median).
+
+## Robustness (ER-05) with the integrated reader (2026-11-18)
+
+The ER-05 degradations again (`scripts/robustness.py --reader known|ocr`, seed 0), now read by
+`GaugeReader` with Version 3: small-gauge crop, rotation median and the spread > 5% RETAKE.
+`known` gives the range as for a registered gauge, `ocr` reads it from the dial. Cover counts
+photos with a value; ≤2% FS is over all photos, so a RETAKE counts as a miss.
+
+MeterFL, 262 (container, two jobs in parallel on 4 cores, so the times are not comparable
+with earlier tables):
+
+| setting | range given: cover / FS mean / ≤2% FS / RETAKE | range by OCR: cover / FS mean / ≤2% FS | earlier path (Version 1, no RETAKE): FS mean / ≤2% FS |
+| --- | --- | --- | --- |
+| clean | 90% / 1.79 / 73% / 10% | 82% / 1.23 / 67% | 2.93 / 68% |
+| low light 1 / 2 / 3 | 90 / 86 / 77% · 1.88 / 1.67 / 1.69 · 69 / 67 / 64% · 9 / 13 / 22% | 80 / 76 / 54% · 1.37 / 4.60 / 5.05 · 61 / 58 / 45% | 3.02 / 3.28 / 4.01 · 64 / 60 / 57% |
+| radiation speckle 1 / 2 / 3 | 90 / 94 / 90% · 2.18 / 2.05 / 1.62 · 72 / 76 / 75% · 9 / 6 / 10% | 81 / 84 / 76% · 1.33 / 1.82 / 1.20 · 64 / 69 / 64% | 2.90 / 2.93 / 2.96 · 69 / 69 / 67% |
+| motion blur 1 / 2 / 3 | 92 / 83 / 56% · 1.75 / 1.66 / 1.99 · 76 / 63 / 37% · 8 / 16 / 39% | 68 / 12 / 1% · 4.42 / 1.09 / 0.60 · 57 / 11 / 1% | 3.09 / 3.94 / 5.95 · 62 / 52 / 44% |
+
+Synthetic v5 val, 600 random photos (work PC, one job at a time; 395 with a box under 40%):
+
+| setting | GaugeReader, range given: cover / FS mean / ≤2% FS / RETAKE | earlier path (no crop, no rotation): cover / FS mean / ≤2% FS | small boxes ≤2% FS: reader / earlier |
+| --- | --- | --- | --- |
+| clean | 96% / 1.13 / 81% / 3% | 100% / 1.43 / 76% | 80 / 72% |
+| low light 1 / 2 / 3 | 92 / 89 / 89% · 1.19 / 1.13 / 1.30 · 79 / 75 / 73% · 6 / 8 / 5% | 99 / 98 / 96% · 1.70 / 1.98 / 1.73 · 74 / 73 / 71% | 78 / 71 / 70 vs 69 / 68 / 67% |
+| radiation speckle 1 / 2 / 3 | 94 / 94 / 94% · 1.11 / 1.15 / 1.21 · 80 / 80 / 79% · 4 / 4 / 4% | 100% · 1.44 / 1.53 / 1.58 · 75 / 74 / 74% | 79 / 79 / 77 vs 70 / 69 / 68% |
+| motion blur 1 / 2 / 3 | 92 / 85 / 74% · 1.23 / 1.65 / 1.88 · 76 / 65 / 52% · 5 / 11 / 20% | 99 / 98 / 96% · 1.56 / 2.73 / 4.22 · 76 / 65 / 53% | 71 / 58 / 40 vs 71 / 58 / 43% |
+
+Time per photo on the work PC: 343 ms (reader, range given) vs 81 ms (earlier single pass).
+
+- With the range given, the error of the photos that are read stays at 1.6–2.2% FS mean on
+  MeterFL and 1.1–1.9% on synthetic under every condition and severity: a degraded photo is
+  declined (RETAKE) rather than misread. The earlier path read almost everything and its mean
+  error rose to 4–6% FS under strong blur.
+- Radiation speckle (up to 0.5% of pixels) changes nothing. Low light 3 and motion blur 2–3 cost
+  coverage: on MeterFL blur 3 sends 39% of the photos to RETAKE, so the share within 2% FS of all
+  photos falls (73 → 37%); on synthetic it stays at the level of the earlier path (52 vs 53%).
+- Range by OCR fails on degraded photos: on dark photos it gives wrong ranges (mean error
+  4.6–5.1% FS at low light 2–3) and on blurred ones none at all (cover 12% and 1% at blur 2–3).
+  For an NPP round with poor light the range must come from the registry
+  (`gauge_reader.registry`); OCR stays a check on sharp photos.
+- ER-05 sets no allowed degradation yet (Q-05). A candidate rule: with the range given, the
+  mean error of read photos stays ≤ 2% FS at every severity (met on both sets), and the RETAKE
+  share is reported per condition (≤ 22% except motion blur 3).
