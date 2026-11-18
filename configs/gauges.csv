@@ -6,3 +6,6 @@ PI-102,0,0.1,MPa,,0.08,example low-pressure line
 PI-201,0,25,MPa,,20,example high-pressure line
 PI-301,0,10,bar,2,8,example cooling water header
 TI-101,0,120,°C,,90,example bearing temperature
+PI-401,0,6,bar,,5,example instrument air line
+PI-402,-1,6,bar,1.5,4.5,example vessel pressure
+PI-403,0,16,bar,,14,example feedwater line
