@@ -19,14 +19,26 @@ import cv2
 import gradio as gr
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("GAUGE_ROOT", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT / "src"))
 from gauge_reader.draw import draw_reading  # noqa: E402
 from gauge_reader.reader import GaugeReader  # noqa: E402
 from gauge_reader.reading.perspective import frontal_view  # noqa: E402
 from gauge_reader.registry import load_registry  # noqa: E402
 
-WEIGHTS = Path(os.environ.get("GAUGE_WEIGHTS", ROOT / "weights" / "best.onnx"))
+def _weights() -> Path:
+    """GAUGE_WEIGHTS (a local file), else GAUGE_WEIGHTS_REPO (a Hugging Face model repo, file
+    GAUGE_WEIGHTS_FILE, default best.onnx), else weights/best.onnx."""
+    if os.environ.get("GAUGE_WEIGHTS"):
+        return Path(os.environ["GAUGE_WEIGHTS"])
+    if os.environ.get("GAUGE_WEIGHTS_REPO"):
+        from huggingface_hub import hf_hub_download
+        return Path(hf_hub_download(os.environ["GAUGE_WEIGHTS_REPO"],
+                                    os.environ.get("GAUGE_WEIGHTS_FILE", "best.onnx")))
+    return ROOT / "weights" / "best.onnx"
+
+
+WEIGHTS = _weights()
 REGISTRY = load_registry(ROOT / "configs" / "gauges.csv")
 UNKNOWN = "Unknown gauge (read the range with OCR)"
 EXAMPLES = ROOT / "demo" / "examples"

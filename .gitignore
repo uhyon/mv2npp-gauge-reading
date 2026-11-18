@@ -31,3 +31,4 @@ assets/backgrounds_review/
 assets/backgrounds_scan/
 !assets/backgrounds/.gitkeep
 !assets/backgrounds/ATTRIBUTION.csv
+build/
