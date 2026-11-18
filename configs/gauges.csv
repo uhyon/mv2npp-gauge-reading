@@ -1,0 +1,8 @@
+# Example registry of known gauges for scripts/read_gauge.py --registry (gauge_reader.registry).
+# Tags and descriptions are made up for the demo; they are not from a real plant.
+tag,scale_min,scale_max,unit,alarm_low,alarm_high,description
+PI-101,0,1.6,MPa,0.4,1.2,example pump discharge pressure
+PI-102,0,0.1,MPa,,0.08,example low-pressure line
+PI-201,0,25,MPa,,20,example high-pressure line
+PI-301,0,10,bar,2,8,example cooling water header
+TI-101,0,120,°C,,90,example bearing temperature
