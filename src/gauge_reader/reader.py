@@ -11,8 +11,9 @@ Stages (docs/REQUIREMENTS.md):
    is read on the dial face when the model has the scale-arc keypoints (``reading.perspective``);
 3. RETAKE checks: no gauge, a scale arc under ``MIN_SWEEP_DEG`` (keypoints collapsed), or the
    three readings more than ``retake_spread`` % of scale apart (``predict.RETAKE_SPREAD``);
-4. scale range and unit: given by the caller (a known instrument) or read from the dial numbers
-   with OCR (``reading.scale_ocr``); no range is a RETAKE too;
+4. scale range and unit: given by the caller (a known instrument, ``registry``) or, for an
+   unknown gauge, read from the dial numbers with OCR (``reading.scale_ocr``); no range is a
+   RETAKE too. With ``check_scale`` OCR also checks a given range (``Reading.scale_check``);
 5. value = min + fraction x span, and, with an alarm band, LOW / HIGH / NORMAL.
 
 ``Reading.alarm`` is RETAKE whenever no value is given, so a round can ask for another photo.
@@ -31,6 +32,7 @@ from gauge_reader.keypoints.yolo import GaugeDetection, detections_from_result, 
 from gauge_reader.predict import CLIP, MIN_SWEEP_DEG, RETAKE_SPREAD, TTA_ANGLE, rotate
 from gauge_reader.reading.geometry import AlarmBand, GaugeKeypoints, check_alarm
 from gauge_reader.reading.scale_ocr import Label, dial_crop, read_scale
+from gauge_reader.registry import compare_scale
 
 CROP_MARGIN = 0.05   # real context around the box, share of its size per side
 WHOLE_IMAGE_SHARE = 0.4  # a box this large (share of the photo) is read on the whole photo
@@ -47,6 +49,8 @@ class Reading:
     scale_min: float | None = None
     scale_max: float | None = None
     scale_source: str = ""           # "given" or "ocr"
+    scale_check: str = ""            # given range vs OCR: match, mismatch, no_ocr ("" unchecked)
+    ocr_scale: tuple | None = None   # what OCR read: (min, max, unit), when it ran and found one
     fraction: float | None = None    # median needle fraction (0 = min tick, 1 = max tick)
     spread: float | None = None      # max - min of the three fractions, % of scale
     box: tuple[float, float, float, float] | None = None
@@ -61,7 +65,8 @@ class Reading:
         k = self.keypoints
         d = {"status": self.status, "alarm": self.alarm, "value": self.value, "unit": self.unit,
              "scale_min": self.scale_min, "scale_max": self.scale_max,
-             "scale_source": self.scale_source, "fraction": self.fraction, "spread": self.spread,
+             "scale_source": self.scale_source, "scale_check": self.scale_check,
+             "fraction": self.fraction, "spread": self.spread,
              "box": self.box, "box_conf": self.box_conf,
              "ms": {s: round(v, 1) for s, v in self.ms.items()}}
         if k is not None:
@@ -104,13 +109,16 @@ class GaugeReader:
                  tta_angle: float | None = TTA_ANGLE, retake_spread: float | None = RETAKE_SPREAD,
                  conf: float = 0.1, imgsz: int = 640, device=None, min_sweep: float = MIN_SWEEP_DEG,
                  clip: float = CLIP, crop_margin: float = CROP_MARGIN, crop_pad: float = CROP_PAD,
-                 whole_share: float = WHOLE_IMAGE_SHARE, square: bool = False):
+                 whole_share: float = WHOLE_IMAGE_SHARE, square: bool = False,
+                 check_scale: bool = False):
         """``model``: a loaded Ultralytics pose model (else loaded from ``weights``).
         ``ocr``: True (rapidocr), False (the range must be given) or an OCR callable.
         ``tta_angle`` None reads upright only (no spread check).
         Framing of a gauge smaller than ``whole_share`` of the photo: the box plus ``crop_margin``
         of real context per side (``square``: a square window), then ``crop_pad`` grey margin;
-        ``whole_share`` > 1 reads every photo whole."""
+        ``whole_share`` > 1 reads every photo whole.
+        ``check_scale``: with a given range, still run OCR and report whether the dial numbers
+        agree (``Reading.scale_check``; the value always uses the given range)."""
         if model is None:
             from ultralytics import YOLO
             model = YOLO(str(weights))
@@ -124,6 +132,7 @@ class GaugeReader:
         self.min_sweep, self.clip = min_sweep, clip
         self.crop_margin, self.crop_pad = crop_margin, crop_pad
         self.whole_share, self.square = whole_share, square
+        self.check_scale = check_scale
 
     def _detect(self, img: np.ndarray) -> list[GaugeDetection]:
         res = self.model.predict(img, imgsz=self.imgsz, conf=self.conf, device=self.device,
@@ -196,17 +205,24 @@ class GaugeReader:
                 out.status = "retake"
                 return out
 
-        # scale range and unit
-        if scale is not None:
-            out.scale_min, out.scale_max, out.unit = float(scale[0]), float(scale[1]), scale[2]
-            out.scale_source = "given"
-        elif self.ocr is not None:
+        # scale range and unit: a known instrument first, OCR as the backup (and the check)
+        sr = None
+        if self.ocr is not None and (scale is None or self.check_scale):
             t = time.perf_counter()
             win, (dx, dy) = dial_crop(img, upright.keypoints, OCR_CROP)
             boxes = [(s, [(x + dx, y + dy) for x, y in poly], c) for s, poly, c in self.ocr(win)]
             sr = read_scale(boxes, upright.keypoints, upright.dial_fit())
             ms["ocr"] = (time.perf_counter() - t) * 1000
-            out.unit, out.labels = sr.unit, sr.inliers
+            out.labels = sr.inliers
+            if sr.ok:
+                out.ocr_scale = (sr.scale_min, sr.scale_max, sr.unit)
+        if scale is not None:
+            out.scale_min, out.scale_max, out.unit = float(scale[0]), float(scale[1]), scale[2]
+            out.scale_source = "given"
+            if sr is not None:
+                out.scale_check = compare_scale(scale, sr.scale_min, sr.scale_max, sr.unit)
+        elif sr is not None:
+            out.unit = sr.unit
             if sr.ok:
                 out.scale_min, out.scale_max, out.scale_source = sr.scale_min, sr.scale_max, "ocr"
         if out.scale_min is None or out.scale_max is None:

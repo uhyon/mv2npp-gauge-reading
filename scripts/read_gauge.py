@@ -10,7 +10,13 @@
     uv run python scripts/evaluate.py score meterfl --pred runs/pose/arc/meterfl_e2e.csv \\
         --out runs/pose/arc/meterfl_e2e
 
-The range and unit come from OCR unless --gt-range takes them from the manifest. --no-tta
+    # known instruments: range, unit and alarm band from a registry by tag; OCR only as backup
+    uv run python scripts/read_gauge.py --weights ... --registry configs/gauges.csv --tag PI-101 photo.jpg
+    uv run python scripts/read_gauge.py --weights ... --registry configs/gauges.csv --tag PI-101 \
+        --check-scale photo.jpg     # also OCR the dial and report match / mismatch with PI-101
+
+The range and unit come from the registry (--tag, or a ``tag`` column in the manifest), else
+from OCR, unless --gt-range takes them from the manifest. --no-tta
 reads upright only (no spread check). See gauge_reader.reader. The CSV keeps status, alarm,
 the OCR range, the spread and the time per stage (ms_detect, ms_keypoints, ms_ocr, ms_total).
 """
@@ -26,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from gauge_reader.reader import GaugeReader
 from gauge_reader.reading.geometry import AlarmBand
+from gauge_reader.registry import load_registry
 
 
 def _f(x):
@@ -46,6 +53,10 @@ def main(argv=None) -> None:
     ap.add_argument("--no-tta", action="store_true")
     ap.add_argument("--retake-spread", type=float, default=5.0)
     ap.add_argument("--band", type=float, nargs=2, metavar=("LOW", "HIGH"))
+    ap.add_argument("--registry", type=Path, help="CSV of known gauges (gauge_reader.registry)")
+    ap.add_argument("--tag", help="the photographed gauge's tag in --registry (single photos)")
+    ap.add_argument("--check-scale", action="store_true",
+                    help="with a known range, still OCR the dial and report whether it agrees")
     ap.add_argument("--conf", type=float, default=0.1)
     ap.add_argument("--device", default=None)
     ap.add_argument("--crop-margin", type=float, default=0.05,
@@ -56,29 +67,41 @@ def main(argv=None) -> None:
     ap.add_argument("--square", action="store_true", help="square crop window around the box")
     a = ap.parse_args(argv)
 
-    reader = GaugeReader(a.weights, ocr=not (a.no_ocr or a.gt_range), conf=a.conf, device=a.device,
+    reader = GaugeReader(a.weights, ocr=not a.no_ocr and (a.check_scale or not a.gt_range), conf=a.conf, device=a.device,
                          tta_angle=None if a.no_tta else 25.0,
                          retake_spread=None if a.retake_spread < 0 else a.retake_spread,
                          crop_margin=a.crop_margin, crop_pad=a.crop_pad,
-                         whole_share=a.whole_share, square=a.square)
+                         whole_share=a.whole_share, square=a.square, check_scale=a.check_scale)
     band = AlarmBand(*a.band) if a.band else None
+    registry = load_registry(a.registry) if a.registry else {}
+    if a.tag and a.tag not in registry:
+        ap.error(f"tag {a.tag} is not in --registry")
+
+    def known(tag):
+        """(scale, band, tag) for a registered tag; band from --band before the registry's."""
+        inst = registry.get((tag or "").strip())
+        if inst is None:
+            return None, band, ""
+        return inst.scale, band or inst.band, inst.tag
 
     if not a.manifest:
+        scale, bnd, tag = known(a.tag)
         for p in a.images:
-            r = reader.read(p, band=band)
-            print(json.dumps({"image": str(p), **r.as_dict()}, ensure_ascii=False))
+            r = reader.read(p, scale=scale, band=bnd)
+            print(json.dumps({"image": str(p), **({"tag": tag} if tag else {}), **r.as_dict()},
+                             ensure_ascii=False))
         return
 
     with open(a.manifest, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     out = []
     for i, row in enumerate(rows):
-        scale = None
+        scale, bnd, tag = known(row.get("tag") or a.tag)
         if a.gt_range:
             lo, hi = _f(row.get("scale_min")), _f(row.get("scale_max"))
             scale = (lo, hi, row.get("unit", "")) if lo is not None and hi is not None else None
         try:
-            r = reader.read(row["image"], scale=scale, band=band)
+            r = reader.read(row["image"], scale=scale, band=bnd)
         except ValueError:
             out.append({"id": row["id"], "value": "", "pred_unit": "", "status": "unreadable"})
             continue
@@ -88,7 +111,10 @@ def main(argv=None) -> None:
                "pred_unit": r.unit if r.value is not None else "", "status": r.status,
                "alarm": r.alarm, "ocr_min": "" if r.scale_min is None else f"{r.scale_min:.6g}",
                "ocr_max": "" if r.scale_max is None else f"{r.scale_max:.6g}",
-               "scale_source": r.scale_source,
+               "scale_source": r.scale_source, "scale_check": r.scale_check,
+               "ocr_read_min": "" if r.ocr_scale is None else f"{r.ocr_scale[0]:.6g}",
+               "ocr_read_max": "" if r.ocr_scale is None else f"{r.ocr_scale[1]:.6g}",
+               "ocr_read_unit": "" if r.ocr_scale is None else r.ocr_scale[2],
                "fraction": "" if r.fraction is None else f"{r.fraction:.4f}",
                "spread": "" if r.spread is None else f"{r.spread:.2f}",
                "box_conf": "" if r.box_conf is None else f"{r.box_conf:.4f}",
