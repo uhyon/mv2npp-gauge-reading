@@ -116,3 +116,33 @@ def arc_points(homography: np.ndarray, dial_center: Point, dial_scale_min: Point
     pts = _project(np.asarray(homography, dtype=np.float64),
                    np.stack([cx + r * np.cos(a), cy + r * np.sin(a)], axis=-1))
     return [(float(x), float(y)) for x, y in pts]
+
+
+def frontal_matrix(fit: DialFit, size: int = 320, radius: float = 0.34) -> np.ndarray:
+    """3x3 map from the photo to the frontal view of ``frontal_view``."""
+    h = np.asarray(fit.homography, dtype=np.float64)
+    # handedness of the face-to-image map at the centre
+    eps = 1e-3
+    o, ex, ey = _project(h, np.array([[0.0, 0.0], [eps, 0.0], [0.0, eps]]))
+    d1, d2 = ex - o, ey - o
+    sign = 1.0 if d1[0] * d2[1] - d1[1] * d2[0] > 0 else -1.0
+    gap = 360.0 - fit.sweep
+    phi0 = math.radians(90.0 + sign * gap / 2)     # min tick, at the bottom-left (or right)
+    r, c = radius * size, size / 2
+    a = np.array([[r * math.cos(phi0), -sign * r * math.sin(phi0), c],
+                  [r * math.sin(phi0), sign * r * math.cos(phi0), c],
+                  [0.0, 0.0, 1.0]])
+    return a @ np.linalg.inv(h)
+
+
+def frontal_view(img: np.ndarray, fit: DialFit, size: int = 320, radius: float = 0.34,
+                 fill: int = 114) -> np.ndarray:
+    """The dial seen from the front (FR-05): the photo warped by the inverse of the fitted
+    homography into a ``size`` x ``size`` image, scale radius ``radius`` x ``size``, the dial
+    centre in the middle and the scale gap at the bottom. Keeps the photo's handedness, so
+    printed numbers stay readable."""
+    import cv2
+
+    return cv2.warpPerspective(img, frontal_matrix(fit, size, radius), (size, size),
+                               flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+                               borderValue=(fill, fill, fill))

@@ -159,3 +159,20 @@ def test_read_rows_reads_arc_models_on_the_face(tmp_path):
     assert abs(float(rec["fraction_img"]) - 0.3) > 0.005
     assert float(rec["fit_rms"]) < 1e-3
     assert rec["arc_50_x"]
+
+
+def test_frontal_view_puts_the_scale_on_an_upright_circle():
+    from gauge_reader.reading.perspective import _project, frontal_matrix, frontal_view
+
+    kp, arc = dial(0.3, yaw=40, pitch=-25, roll=20)
+    fit = fit_dial(kp, arc)
+    m = frontal_matrix(fit, size=200, radius=0.3)
+    pts = _project(m, np.array([kp.center, kp.scale_min, *arc, kp.scale_max]))
+    c, ring = pts[0], pts[1:]
+    assert c == pytest.approx([100, 100], abs=0.05)
+    assert np.linalg.norm(ring - c, axis=1) == pytest.approx([60] * 5, abs=0.05)
+    # gap at the bottom: min and max ticks below the centre, mirror images of each other
+    mn, mx = ring[0], ring[-1]
+    assert mn[1] > 100 and mx[1] > 100
+    assert mn[1] == pytest.approx(mx[1], abs=0.05) and (mn[0] - 100) == pytest.approx(100 - mx[0], abs=0.05)
+    assert frontal_view(np.zeros((640, 640, 3), np.uint8), fit, size=200).shape == (200, 200, 3)
