@@ -38,6 +38,11 @@ def draw_reading(img: np.ndarray, r: Reading) -> np.ndarray:
     k = r.keypoints
     if k is not None:
         ring = [k.scale_min, *r.arc, k.scale_max]
+        if r.fit is not None:      # the fitted scale arc, through the dial-face homography
+            from gauge_reader.reading.perspective import _project
+            a = np.radians(np.linspace(0.0, r.fit.sweep, 90))
+            ring = _project(np.asarray(r.fit.homography, dtype=np.float64),
+                            np.stack([np.cos(a), np.sin(a)], axis=-1))
         cv2.polylines(out, [np.array([_pt(p) for p in ring], np.int32)], False,
                       KP_COLORS["arc"], th, cv2.LINE_AA)
         cv2.line(out, _pt(k.center), _pt(k.tip), KP_COLORS["tip"], th + 1, cv2.LINE_AA)
