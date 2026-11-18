@@ -62,6 +62,7 @@ class Reading:
     box_share: float | None = None   # box area / photo area
     keypoints: GaugeKeypoints | None = None
     arc: tuple = ()
+    fit: object = None               # perspective.DialFit of the upright pass (frontal view), or None
     labels: list[Label] = field(default_factory=list)   # OCR labels on the fitted scale line
     ms: dict[str, float] = field(default_factory=dict)
 
@@ -114,7 +115,7 @@ class GaugeReader:
                  conf: float = 0.1, imgsz: int = 640, device=None, min_sweep: float = MIN_SWEEP_DEG,
                  clip: float = CLIP, crop_margin: float = CROP_MARGIN, crop_pad: float = SMALL_CROP_PAD,
                  whole_share: float = WHOLE_IMAGE_SHARE, square: bool = CROP_SQUARE,
-                 check_scale: bool = False):
+                 check_scale: bool = False, face_fit: bool = True):
         """``model``: a loaded Ultralytics pose model (else loaded from ``weights``).
         ``ocr``: True (rapidocr), False (the range must be given) or an OCR callable.
         ``tta_angle`` None reads upright only (no spread check).
@@ -122,7 +123,9 @@ class GaugeReader:
         of real context per side (``square``: a square window), then ``crop_pad`` grey margin;
         ``whole_share`` 0 reads every photo whole, > 1 crops every photo.
         ``check_scale``: with a given range, still run OCR and report whether the dial numbers
-        agree (``Reading.scale_check``; the value always uses the given range)."""
+        agree (``Reading.scale_check``; the value always uses the given range).
+        ``face_fit`` False reads the needle with image-plane angles, without the frontal
+        correction (FR-05 comparison)."""
         if model is None:
             from ultralytics import YOLO
             model = YOLO(str(weights))
@@ -137,6 +140,7 @@ class GaugeReader:
         self.crop_margin, self.crop_pad = crop_margin, crop_pad
         self.whole_share, self.square = whole_share, square
         self.check_scale = check_scale
+        self.face_fit = face_fit
 
     def _detect(self, img: np.ndarray) -> list[GaugeDetection]:
         res = self.model.predict(img, imgsz=self.imgsz, conf=self.conf, device=self.device,
@@ -188,13 +192,15 @@ class GaugeReader:
                 upright = _move(d, ox, oy)
             try:
                 if d.sweep() >= self.min_sweep:
-                    fracs.append(min(max(d.fraction(), -self.clip), 1.0 + self.clip))
+                    f = d.fraction() if self.face_fit else d.image_fraction()
+                    fracs.append(min(max(f, -self.clip), 1.0 + self.clip))
             except ValueError:
                 pass
         ms["keypoints"] = (time.perf_counter() - t) * 1000
         if upright is None:
             upright = top
         out.keypoints, out.arc = upright.keypoints, upright.arc
+        out.fit = upright.dial_fit()
         try:
             sweep_ok = upright.sweep() >= self.min_sweep
         except ValueError:

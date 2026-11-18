@@ -53,6 +53,10 @@ def main(argv=None) -> None:
     ap.add_argument("--no-tta", action="store_true")
     ap.add_argument("--retake-spread", type=float, default=5.0)
     ap.add_argument("--band", type=float, nargs=2, metavar=("LOW", "HIGH"))
+    ap.add_argument("--no-face-fit", action="store_true",
+                    help="read the needle with image-plane angles (no frontal correction)")
+    ap.add_argument("--frontal", type=Path,
+                    help="single photos: save the frontal view of each dial into this folder")
     ap.add_argument("--registry", type=Path, help="CSV of known gauges (gauge_reader.registry)")
     ap.add_argument("--tag", help="the photographed gauge's tag in --registry (single photos)")
     ap.add_argument("--check-scale", action="store_true",
@@ -72,7 +76,8 @@ def main(argv=None) -> None:
                          tta_angle=None if a.no_tta else 25.0,
                          retake_spread=None if a.retake_spread < 0 else a.retake_spread,
                          crop_margin=a.crop_margin, crop_pad=a.crop_pad,
-                         whole_share=a.whole_share, square=a.square, check_scale=a.check_scale)
+                         whole_share=a.whole_share, square=a.square, check_scale=a.check_scale,
+                         face_fit=not a.no_face_fit)
     band = AlarmBand(*a.band) if a.band else None
     registry = load_registry(a.registry) if a.registry else {}
     if a.tag and a.tag not in registry:
@@ -89,6 +94,12 @@ def main(argv=None) -> None:
         scale, bnd, tag = known(a.tag)
         for p in a.images:
             r = reader.read(p, scale=scale, band=bnd)
+            if a.frontal and r.fit is not None:
+                import cv2
+                from gauge_reader.reading.perspective import frontal_view
+                a.frontal.mkdir(parents=True, exist_ok=True)
+                cv2.imwrite(str(a.frontal / f"{Path(p).stem}_frontal.jpg"),
+                            frontal_view(cv2.imread(str(p)), r.fit))
             print(json.dumps({"image": str(p), **({"tag": tag} if tag else {}), **r.as_dict()},
                              ensure_ascii=False))
         return
