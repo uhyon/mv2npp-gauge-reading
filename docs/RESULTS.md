@@ -543,3 +543,28 @@ are about equal (with / without: 2.42 / 77% and 2.37 / 80%, container), as for V
 `perspective.frontal_view` (and `read_gauge.py --frontal DIR`) warps the photo with the inverse
 of the fitted homography, so the dial is shown from the front with the scale gap at the bottom,
 for the demo.
+
+## Processing time with ONNX Runtime (NFR-01, ER-07, 2026-11-18)
+
+`best.pt` exported to ONNX (opset 17, 37 MB) and read through Ultralytics' ONNX Runtime backend
+(`read_gauge.py --weights best.onnx`). MeterFL, 262 photos, work PC (Intel i5-12400, CPU only),
+one job at a time; median per photo (detection / keypoints / OCR):
+
+| reader | time | coverage | mean / median % FS | ≤2% FS: read / all |
+| --- | ---: | ---: | ---: | ---: |
+| ONNX, range given (registered gauge) | **289 ms** (88 / 201 / –) | 90.1% | 2.06 / 0.97 | 81% / 73% |
+| ONNX, range by OCR (full pipeline) | 542 ms (88 / 198 / 260) | 87.8% | 1.83 / 0.95 | 83% / 72.5% |
+| ONNX, range given, fast mode (`--no-tta`, no rotation check) | 96 ms (89 / 7 / –) | 99.6% | 2.84 / 1.11 | 74% / 73% |
+| PyTorch, range given | 273 ms (83 / 190 / –) | 90.1% | 1.79 / 0.96 | 81% / 73% |
+| PyTorch, range by OCR | 506 ms | – | – | – / 72.5% |
+
+- ONNX and PyTorch give almost the same readings (75% of the 234 photos read by both are
+  identical, the largest difference 1.1% FS); the mean differs because 4 photos near the 5%
+  spread line switch between read and RETAKE, one of them a dial turned by 90°+. On this CPU
+  ONNX is not faster (container CPU: 319 → 243 ms).
+- NFR-01 (≤ 0.5 s) is met for a registered gauge (0.29 s) and in fast mode (0.10 s); the full
+  pipeline with OCR takes 0.54 s. The two turned keypoint passes (about 190 ms) and OCR (about
+  250 ms) are the cost; the rotation check does not raise the share within 2% of all photos
+  on MeterFL (73% either way) but turns 25 likely misreads into RETAKE.
+- The demo (`demo/app.py`) loads the model on the first request (about 1.3 s), then reads in
+  0.4–0.6 s per photo.
