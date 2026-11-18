@@ -51,6 +51,7 @@ class Reading:
     spread: float | None = None      # max - min of the three fractions, % of scale
     box: tuple[float, float, float, float] | None = None
     box_conf: float | None = None
+    box_share: float | None = None   # box area / photo area
     keypoints: GaugeKeypoints | None = None
     arc: tuple = ()
     labels: list[Label] = field(default_factory=list)   # OCR labels on the fitted scale line
@@ -69,10 +70,15 @@ class Reading:
         return d
 
 
-def crop_box(img: np.ndarray, box, margin: float = CROP_MARGIN, value: int = 114):
+def crop_box(img: np.ndarray, box, margin: float = CROP_MARGIN, value: int = 114,
+             square: bool = False):
     """The box plus ``margin`` of its size per side; grey where that leaves the image.
+    ``square``: a square window around the box centre, side = longer box side x (1 + 2 margin).
     Returns the crop and the (x, y) of its top-left corner in the image."""
     x0, y0, x1, y1 = box
+    if square:
+        cx, cy, half = (x0 + x1) / 2, (y0 + y1) / 2, max(x1 - x0, y1 - y0) / 2
+        x0, y0, x1, y1 = cx - half, cy - half, cx + half, cy + half
     mx, my = (x1 - x0) * margin, (y1 - y0) * margin
     X0, Y0 = int(np.floor(x0 - mx)), int(np.floor(y0 - my))
     X1, Y1 = int(np.ceil(x1 + mx)), int(np.ceil(y1 + my))
@@ -97,10 +103,14 @@ class GaugeReader:
     def __init__(self, weights: str | Path | None = None, *, model=None, ocr=True,
                  tta_angle: float | None = TTA_ANGLE, retake_spread: float | None = RETAKE_SPREAD,
                  conf: float = 0.1, imgsz: int = 640, device=None, min_sweep: float = MIN_SWEEP_DEG,
-                 clip: float = CLIP):
+                 clip: float = CLIP, crop_margin: float = CROP_MARGIN, crop_pad: float = CROP_PAD,
+                 whole_share: float = WHOLE_IMAGE_SHARE, square: bool = False):
         """``model``: a loaded Ultralytics pose model (else loaded from ``weights``).
         ``ocr``: True (rapidocr), False (the range must be given) or an OCR callable.
-        ``tta_angle`` None reads upright only (no spread check)."""
+        ``tta_angle`` None reads upright only (no spread check).
+        Framing of a gauge smaller than ``whole_share`` of the photo: the box plus ``crop_margin``
+        of real context per side (``square``: a square window), then ``crop_pad`` grey margin;
+        ``whole_share`` > 1 reads every photo whole."""
         if model is None:
             from ultralytics import YOLO
             model = YOLO(str(weights))
@@ -112,6 +122,8 @@ class GaugeReader:
         self.tta_angle, self.retake_spread = tta_angle, retake_spread
         self.conf, self.imgsz, self.device = conf, imgsz, device
         self.min_sweep, self.clip = min_sweep, clip
+        self.crop_margin, self.crop_pad = crop_margin, crop_pad
+        self.whole_share, self.square = whole_share, square
 
     def _detect(self, img: np.ndarray) -> list[GaugeDetection]:
         res = self.model.predict(img, imgsz=self.imgsz, conf=self.conf, device=self.device,
@@ -138,12 +150,15 @@ class GaugeReader:
         # keypoints on the crop: upright and turned
         x0, y0, x1, y1 = top.box
         h, w = img.shape[:2]
-        closeup = (x1 - x0) * (y1 - y0) >= WHOLE_IMAGE_SHARE * w * h
+        out.box_share = (x1 - x0) * (y1 - y0) / (w * h)
+        closeup = out.box_share >= self.whole_share
         if closeup:
             crop, (ox, oy) = img, (0, 0)          # the photo is already a close-up
+            pad = CROP_PAD                        # as the detection pass it reuses
         else:
-            crop, (ox, oy) = crop_box(img, top.box)
-        _, px, py = pad_image(crop, CROP_PAD)
+            crop, (ox, oy) = crop_box(img, top.box, self.crop_margin, square=self.square)
+            pad = self.crop_pad
+        _, px, py = pad_image(crop, pad)
         ox, oy = ox - px, oy - py              # turned first, then padded (as predict_readings)
         angles = [0.0] if not self.tta_angle else [0.0, self.tta_angle, -self.tta_angle]
         fracs, upright = [], None
@@ -152,7 +167,7 @@ class GaugeReader:
             if ang == 0.0 and closeup:
                 ds = dets0                          # same input as the detection pass
             else:
-                ds = self._detect(pad_image(rotate(ang)(crop, {}) if ang else crop, CROP_PAD)[0])
+                ds = self._detect(pad_image(rotate(ang)(crop, {}) if ang else crop, pad)[0])
             if not ds:
                 continue
             d = ds[0]

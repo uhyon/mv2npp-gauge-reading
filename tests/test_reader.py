@@ -44,3 +44,10 @@ def test_bad_geometry():
     model = FakeModel([(40, 0.5)] * 4)
     r = GaugeReader(model=model, ocr=False).read(_img(), scale=(0, 10, "bar"))
     assert r.status == "bad_geometry"
+
+
+def test_crop_box_square_window():
+    img = np.zeros((100, 100, 3), np.uint8)
+    crop, (x, y) = crop_box(img, (40, 45, 60, 55), margin=0.25, square=True)
+    assert crop.shape[:2] == (30, 30)
+    assert (x, y) == (35, 35)

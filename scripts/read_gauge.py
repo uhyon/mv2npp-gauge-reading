@@ -48,11 +48,19 @@ def main(argv=None) -> None:
     ap.add_argument("--band", type=float, nargs=2, metavar=("LOW", "HIGH"))
     ap.add_argument("--conf", type=float, default=0.1)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--crop-margin", type=float, default=0.05,
+                    help="real context around a small gauge's box, share of its size per side")
+    ap.add_argument("--crop-pad", type=float, default=0.15, help="grey margin around that crop")
+    ap.add_argument("--whole-share", type=float, default=0.4,
+                    help="boxes at least this share of the photo are read whole (>1: always whole)")
+    ap.add_argument("--square", action="store_true", help="square crop window around the box")
     a = ap.parse_args(argv)
 
     reader = GaugeReader(a.weights, ocr=not (a.no_ocr or a.gt_range), conf=a.conf, device=a.device,
                          tta_angle=None if a.no_tta else 25.0,
-                         retake_spread=None if a.retake_spread < 0 else a.retake_spread)
+                         retake_spread=None if a.retake_spread < 0 else a.retake_spread,
+                         crop_margin=a.crop_margin, crop_pad=a.crop_pad,
+                         whole_share=a.whole_share, square=a.square)
     band = AlarmBand(*a.band) if a.band else None
 
     if not a.manifest:
@@ -83,7 +91,8 @@ def main(argv=None) -> None:
                "scale_source": r.scale_source,
                "fraction": "" if r.fraction is None else f"{r.fraction:.4f}",
                "spread": "" if r.spread is None else f"{r.spread:.2f}",
-               "box_conf": "" if r.box_conf is None else f"{r.box_conf:.4f}"}
+               "box_conf": "" if r.box_conf is None else f"{r.box_conf:.4f}",
+               "box_share": "" if r.box_share is None else f"{r.box_share:.4f}"}
         for k, v in r.ms.items():
             rec[f"ms_{k}"] = f"{v:.1f}"
         rec["ms_total"] = f"{sum(r.ms.values()):.1f}"
