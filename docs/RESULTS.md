@@ -513,3 +513,33 @@ Time per photo on the work PC: 343 ms (reader, range given) vs 81 ms (earlier si
 - ER-05 sets no allowed degradation yet (Q-05). A candidate rule: with the range given, the
   mean error of read photos stays ≤ 2% FS at every severity (met on both sets), and the RETAKE
   share is reported per condition (≤ 22% except motion blur 3).
+
+## Frontal correction before / after (FR-05, 2026-11-18)
+
+FR-05 asks for the reading error with and without the frontal correction on the synthetic
+val set with yaw ±50° and pitch ±40°. The correction is the dial-face fit of Version 3: a
+homography from the centre and the five scale keypoints to a round dial, the needle read on the
+face (`reading.perspective`). Without it the same keypoints are read with image-plane angles
+(`read_gauge.py --no-face-fit`). Version 3, `GaugeReader`, range from the ground truth, rotation
+median, no RETAKE; synthetic `synth_2d` val, 2,000 photos (work PC, 358 ms per photo median for
+both, all 2,000 read):
+
+| face tilt | n | with correction: FS mean / ≤2% FS | without: FS mean / ≤2% FS |
+| --- | ---: | ---: | ---: |
+| all | 2000 | **0.56 / 98%** | 1.86 / 66% |
+| 0–10° | 68 | 0.30 / 100% | 0.32 / 100% |
+| 10–20° | 241 | 0.40 / 99% | 0.50 / 99% |
+| 20–30° | 422 | 0.50 / 98% | 0.96 / 91% |
+| 30–40° | 586 | 0.58 / 99% | 1.81 / 64% |
+| 40–50° | 504 | 0.61 / 98% | 2.74 / 42% |
+| 50°+ | 179 | 0.80 / 94% | 4.12 / 33% |
+| gauge < 200 px | 163 | 0.99 / 92% | 2.09 / 66% |
+
+Without the correction the error grows quickly past 20° of tilt; with it, 94% of the dials
+tilted 50° or more are still within 2% FS. The spread > 5 share (RETAKE) is 1–2% either way, so
+the rotation check does not depend on the tilt. On MeterFL, mostly frontal close-ups, the two
+are about equal (with / without: 2.42 / 77% and 2.37 / 80%, container), as for Version 3 alone.
+
+`perspective.frontal_view` (and `read_gauge.py --frontal DIR`) warps the photo with the inverse
+of the fitted homography, so the dial is shown from the front with the scale gap at the bottom,
+for the demo.
