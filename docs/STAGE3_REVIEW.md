@@ -16,8 +16,8 @@
 | FR-08 값 계산 | ✅ | `tests/test_geometry.py` |
 | FR-09 RETAKE | ✅ | 회전 판독(±25°) 세 값의 차이 > 5% (사용자 결정 11-17), 눈금 호 < 90°, 범위 없음 |
 | FR-10 경보 | ✅ | `check_alarm` 경계 테스트. 정상 범위는 계기 등록표 `configs/gauges.csv`에서 받음 (11-18) |
-| FR-11 출력 | 🟡 | 값, 단위, 상태, spread, 키포인트는 `Reading`으로 나옴. 키포인트를 그린 이미지는 데모에서 추가 |
-| FR-12 웹 데모 | ⏳ | 4단계 |
+| FR-11 출력 | ✅ | `Reading` (값, 단위, 상태, spread, 키포인트) + `gauge_reader.draw.draw_reading` 이미지. 데모와 `read_gauge.py`가 같은 `Reading`을 씀 |
+| FR-12 웹 데모 | 🟡 | `demo/app.py` 로컬 동작 확인 (예제 8장). Hugging Face Spaces 공개는 4단계 |
 | FR-13 열화 모듈 | ✅ | `gauge_reader.eval.degrade`, 고정 seed (`tests/test_degrade.py`) |
 
 ## 평가 (ER)
@@ -30,23 +30,23 @@
 | ER-04 검출 (obaw9, mAP@0.5 ≥ 0.90) | ✅ | AP50 0.955 (v4tii 0.970) |
 | ER-05 견고성 | ✅ (보고) | 범위 등록 시 읽어낸 사진의 평균 오차가 모든 조건·강도에서 1.6–2.2% FS(MeterFL), 1.1–1.9%(합성). 블러 3단계 RETAKE 39%(MeterFL). OCR 범위는 저조도·블러에서 실패. 허용 기준(Q-05) 후보: 읽어낸 사진 평균 ≤ 2% FS |
 | ER-06 RETAKE | ✅ (보고) | MeterFL 재촬영 10%, 받아들인 판독 1.79% FS. 열화본별 비율은 ER-05 표 |
-| ER-07 처리 시간 (≤ 0.5 s, ONNX) | 🟡 | PyTorch CPU (작업 PC i5-12400): 범위 등록 약 0.34 s, OCR 포함 0.43 s. ONNX 측정은 4단계 첫 작업 |
+| ER-07 처리 시간 (≤ 0.5 s, ONNX) | 🟡 | ONNX Runtime, 작업 PC i5-12400, MeterFL 장당 중간값: 범위 등록 0.29 s (충족), OCR 포함 전체 0.54 s (약간 초과), 빠른 모드 0.10 s. PyTorch는 0.27 / 0.51 s |
 | ER-08, ER-09 | – | 선택 항목, 하지 않음 (실사 학습 데이터 없음, Cambridge 링크 중단) |
 
 ## 비기능·데이터 (NFR, DR)
 
 | ID | 상태 | 비고 |
 | --- | --- | --- |
-| NFR-01 처리 시간 | 🟡 | ER-07 |
+| NFR-01 처리 시간 | 🟡 | ER-07. 등록 계기는 충족, OCR 경로는 0.54 s |
 | NFR-02 재현성 | 🟡 | seed와 설정 파일은 있음. Weights & Biases 기록은 쓰지 않음 (Kaggle 출력 `results.csv`로 대신). README 명령 정리는 5단계 |
 | NFR-03 코드 품질 | ✅ | 단계별 모듈, `pytest` 201개 통과 |
-| NFR-04 ONNX | ⏳ | 4단계 |
+| NFR-04 ONNX | ✅ | `best.onnx`로 데모 동작 확인 (결과는 PyTorch와 거의 같음) |
 | NFR-05 README | ⏳ | 5단계 (성능표는 이 문서와 RESULTS에서) |
 | NFR-06 한계 명시 | 🟡 | DATASETS.md에 있음. README 한계 절은 5단계 |
 | NFR-07 MIT | ✅ | LICENSE |
 | DR-01–04, DR-08 | ✅ | DATASETS.md (MeterFL 30장 손 검수: 범위·단위 30/30 일치) |
 | DR-05 obaw9 분할 | 🟡 | 학습에 쓰지 않아 1,471장 전체를 평가에 사용. 분할 목록 대신 "전체 사용"으로 기록 |
-| DR-06 데모 이미지 | ⏳ | 합성 렌더와 CC BY Roboflow만, 출처 표기 |
+| DR-06 데모 이미지 | ✅ | `demo/examples/` 합성 4장 + CC BY 4.0 Roboflow v4tii 4장, `ATTRIBUTION.md` |
 | DR-07 파생 데이터 | ✅ | 파생 데이터 공개 없음 (보정값 CSV만, CC BY-SA 표기 필요 여부는 5단계 확인) |
 
 ## 3단계 판정

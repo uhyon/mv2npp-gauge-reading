@@ -78,7 +78,8 @@ STATUS_TEXT = {
 def summary(r, inst) -> str:
     lines = []
     if r.value is not None:
-        lines.append(f"## {r.value:.4g} {r.unit}" + (f"  ·  **{r.alarm}**" if r.alarm else ""))
+        unit = r.unit or "(unit not read)"
+        lines.append(f"## {r.value:.4g} {unit}" + (f"  ·  **{r.alarm}**" if r.alarm else ""))
     else:
         lines.append("## RETAKE")
     lines.append(f"- Status: {STATUS_TEXT.get(r.status, r.status)}")
