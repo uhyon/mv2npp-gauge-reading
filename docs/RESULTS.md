@@ -414,3 +414,59 @@ degradations, not the dial size: no range on 90% of motion-blurred photos, 69% d
 light, against 21% with no degradation. Many blurred dials yield no text at all, even at a
 135–155 px radius. Range by OCR therefore needs a sharp photo; for a known instrument the range
 is given and only the needle is read.
+
+## Framing of small gauges (2026-11-18)
+
+A gauge whose box covers less than 40% of the photo is read through a crop. Until now the crop
+was the box plus 5% per side with a 15% grey margin, so a small gauge filled most of an
+upscaled patch, unlike the synthetic renders (gauge at 25–90% of the frame with real scene
+around it). Six framings were compared with Version 3 on 600 random synthetic v5 val photos
+(gauge size down to 12% of the frame; 386 with a box under 40%) and on MeasureBench, range from
+the ground truth, rotation median kept and no RETAKE, so every detected photo is scored
+(work PC, `read_gauge.py --gt-range --retake-spread -1`):
+
+| synthetic v5 val, 600 | framing of a small gauge | mean / median % FS | ≤2% FS | spread > 5 | ≤2% FS, gauge < 200 px (129) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| base (until now) | box + 5%, grey 15% | 1.67 / 0.99 | 77.5% | 11.3% | 57.4% |
+| m25 | box + 25% scene | 1.43 / 0.90 | 80.7% | 5.2% | 65.9% |
+| m50 | box + 50% scene | 1.29 / 0.82 | 81.8% | 3.2% | 71.3% |
+| m25sq | square, + 25% scene | 1.36 / 0.88 | 80.7% | 4.3% | 65.1% |
+| **m50sq (new default)** | square, + 50% scene | **1.26 / 0.83** | **82.3%** | **2.8%** | **73.6%** |
+| all cropped | every photo, box + 5%, grey 15% | 1.64 / 0.93 | 78.8% | 12.3% | 57.4% |
+
+Coverage is 98.3–98.5% for all. On the photos with a box under 40% the share within 2% FS goes
+from 75.6% to 83.2% and the spread > 5 share (the RETAKE rule) from 16.8% to 3.6%. Gauges of
+200–400 px gain 82.6 → 85.0%, larger ones are read whole and barely change. Cropping large
+gauges as well ("all cropped") helps those on synthetic (400+ px: 83.5 → 87.2%) but was worse on
+the MeterFL close-ups (2–5x more RETAKE), so close-ups stay whole.
+
+MeasureBench cannot separate the framings: only 42 of 142 photos have a hand-labelled range
+(about 38 scored, 30 with a small box); within 2% FS is 36–40% for all six and 43–47% on the small
+boxes. MeterFL (all close-ups, 10 of 262 boxes under 40%) is unchanged: 2.45 → 2.39% FS mean,
+77% within 2% in both (container, GT range, no RETAKE).
+
+New default: square window of the box plus 50% real scene per side, no grey margin
+(`GaugeReader(crop_margin=0.5, crop_pad=0, square=True)`; `read_gauge.py --crop-margin
+--crop-pad --no-square --whole-share` to change it).
+
+## Known gauges first, OCR as backup and check (2026-11-18)
+
+In a round the gauge in front of the camera is known (panel tag, QR code, checklist), so its
+range, unit and alarm band come from a registry (`gauge_reader.registry`, example
+`configs/gauges.csv`, `read_gauge.py --registry configs/gauges.csv --tag PI-101`). OCR reads the
+range only for a gauge that is not registered. This removes the OCR failures on degraded photos
+(synthetic val: no OCR range on 90% of motion-blurred dials). With `--check-scale` OCR still
+reads the dial numbers and reports whether they agree with the registered range
+(`scale_check`: match / mismatch / no_ocr; end values within 2% of the span and the same unit
+when one is read), which catches a photo of the wrong gauge.
+
+MeterFL, 239 photos read (Version 3, registered range = the label):
+
+| | photos |
+| --- | ---: |
+| correct tag: match | 215 |
+| correct tag: mismatch (false alarm) | 2 (0–160 psi read as 100–280; −5–25 for 0–25 MPa) |
+| correct tag: OCR finds no range | 22 |
+| wrong tag (each of the 17 other ranges of the set given instead), flagged | 98.7% of 3,689 pairs |
+
+The check adds the OCR time (container: 392 → 557 ms per photo median).

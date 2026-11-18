@@ -3,10 +3,12 @@
 Stages (docs/REQUIREMENTS.md):
 
 1. detection: the pose model on the whole photo; the most confident gauge is kept;
-2. keypoints on a close-up of that gauge with a grey margin of ``CROP_PAD`` (the framing of the
-   MeterFL crops read with --pad 0.15): the whole photo when the box covers at least
-   ``WHOLE_IMAGE_SHARE`` of it, else the box plus ``CROP_MARGIN`` per side. (On MeterFL,
-   cropping close-ups to the box instead let 2–5x more photos fall to RETAKE.) Read
+2. keypoints on a close-up of that gauge: the whole photo with a grey margin of ``CROP_PAD``
+   (the framing of the MeterFL crops read with --pad 0.15) when the box covers at least
+   ``WHOLE_IMAGE_SHARE`` of it (on MeterFL, cropping close-ups to the box let 2–5x more photos
+   fall to RETAKE); else a square window of the box plus ``CROP_MARGIN`` of real scene per
+   side, so a small gauge fills about half of the frame as in the synthetic training renders
+   (2026-11-18 comparison on synthetic v5 val: gauges under 200 px within 2% FS 57 -> 74%). Read
    upright and turned by +/- ``tta_angle``; the needle fraction is the median of the three and
    is read on the dial face when the model has the scale-arc keypoints (``reading.perspective``);
 3. RETAKE checks: no gauge, a scale arc under ``MIN_SWEEP_DEG`` (keypoints collapsed), or the
@@ -34,9 +36,11 @@ from gauge_reader.reading.geometry import AlarmBand, GaugeKeypoints, check_alarm
 from gauge_reader.reading.scale_ocr import Label, dial_crop, read_scale
 from gauge_reader.registry import compare_scale
 
-CROP_MARGIN = 0.05   # real context around the box, share of its size per side
+CROP_MARGIN = 0.5    # real context around a small gauge's box, share of its size per side
+CROP_SQUARE = True   # a square window around the box centre
+CROP_PAD = 0.15      # grey margin around a close-up read whole (predict_readings --pad)
+SMALL_CROP_PAD = 0.0  # and around the crop of a small gauge (it already has real context)
 WHOLE_IMAGE_SHARE = 0.4  # a box this large (share of the photo) is read on the whole photo
-CROP_PAD = 0.15      # then a grey margin, as for the MeterFL crops (predict_readings --pad)
 OCR_CROP = 1.6       # OCR window, in scale radii around the centre
 
 
@@ -108,15 +112,15 @@ class GaugeReader:
     def __init__(self, weights: str | Path | None = None, *, model=None, ocr=True,
                  tta_angle: float | None = TTA_ANGLE, retake_spread: float | None = RETAKE_SPREAD,
                  conf: float = 0.1, imgsz: int = 640, device=None, min_sweep: float = MIN_SWEEP_DEG,
-                 clip: float = CLIP, crop_margin: float = CROP_MARGIN, crop_pad: float = CROP_PAD,
-                 whole_share: float = WHOLE_IMAGE_SHARE, square: bool = False,
+                 clip: float = CLIP, crop_margin: float = CROP_MARGIN, crop_pad: float = SMALL_CROP_PAD,
+                 whole_share: float = WHOLE_IMAGE_SHARE, square: bool = CROP_SQUARE,
                  check_scale: bool = False):
         """``model``: a loaded Ultralytics pose model (else loaded from ``weights``).
         ``ocr``: True (rapidocr), False (the range must be given) or an OCR callable.
         ``tta_angle`` None reads upright only (no spread check).
         Framing of a gauge smaller than ``whole_share`` of the photo: the box plus ``crop_margin``
         of real context per side (``square``: a square window), then ``crop_pad`` grey margin;
-        ``whole_share`` > 1 reads every photo whole.
+        ``whole_share`` 0 reads every photo whole, > 1 crops every photo.
         ``check_scale``: with a given range, still run OCR and report whether the dial numbers
         agree (``Reading.scale_check``; the value always uses the given range)."""
         if model is None:

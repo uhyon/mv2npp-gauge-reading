@@ -59,12 +59,13 @@ def main(argv=None) -> None:
                     help="with a known range, still OCR the dial and report whether it agrees")
     ap.add_argument("--conf", type=float, default=0.1)
     ap.add_argument("--device", default=None)
-    ap.add_argument("--crop-margin", type=float, default=0.05,
+    ap.add_argument("--crop-margin", type=float, default=0.5,
                     help="real context around a small gauge's box, share of its size per side")
-    ap.add_argument("--crop-pad", type=float, default=0.15, help="grey margin around that crop")
+    ap.add_argument("--crop-pad", type=float, default=0.0, help="grey margin around that crop")
     ap.add_argument("--whole-share", type=float, default=0.4,
-                    help="boxes at least this share of the photo are read whole (>1: always whole)")
-    ap.add_argument("--square", action="store_true", help="square crop window around the box")
+                    help="boxes at least this share of the photo are read whole (0: always whole, >1: always cropped)")
+    ap.add_argument("--no-square", dest="square", action="store_false",
+                    help="crop the box's own shape instead of a square window")
     a = ap.parse_args(argv)
 
     reader = GaugeReader(a.weights, ocr=not a.no_ocr and (a.check_scale or not a.gt_range), conf=a.conf, device=a.device,
