@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analog Gauge Reader</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.wasm.min.js"></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header>
+  <h1>Analog Gauge Reader</h1>
+  <p>Reads a dial gauge from a photo: a YOLO11s-pose model finds the gauge and seven keypoints
+  (centre, needle tip, scale ends and three points on the scale arc), the scale arc is fitted
+  as a circle seen in perspective, and the needle is read on the straightened dial face.
+  Everything runs in your browser; photos are not uploaded.</p>
+</header>
+<main>
+  <section class="panel controls">
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="image/*">
+      <span>Drop a photo here or <u>choose a file</u></span>
+    </label>
+    <div class="field">
+      <span class="label">Examples</span>
+      <div id="examples" class="examples"></div>
+    </div>
+    <div class="field">
+      <label class="label" for="tag">Gauge</label>
+      <select id="tag"></select>
+      <div id="custom" class="custom" hidden>
+        <input id="cmin" type="number" step="any" value="0" aria-label="Scale min">
+        <span>to</span>
+        <input id="cmax" type="number" step="any" value="10" aria-label="Scale max">
+        <input id="cunit" type="text" value="bar" aria-label="Unit">
+      </div>
+      <p id="taginfo" class="hint"></p>
+    </div>
+    <label class="check"><input type="checkbox" id="fast"> Fast mode (one pass, no RETAKE check)</label>
+    <button id="read" disabled>Read gauge</button>
+    <p id="status" class="hint" role="status">Loading the model…</p>
+  </section>
+  <section class="panel results">
+    <div class="views">
+      <figure><canvas id="drawn" width="640" height="480"></canvas><figcaption>Detection and keypoints</figcaption></figure>
+      <figure><canvas id="frontal" width="320" height="320"></canvas><figcaption>Dial face, straightened</figcaption></figure>
+    </div>
+    <div id="summary" class="summary"><p class="hint">Pick an example or add a photo.</p></div>
+  </section>
+</main>
+<footer>
+  <p><b>Limits.</b> The browser version takes the scale range from the gauge registry (the tags are
+  made-up examples) or from your input; the full version also reads the dial numbers with OCR.
+  A reading is a demonstration, not a safety measurement. When the three readings (upright and
+  turned ±25°) disagree by more than 5% of scale, the answer is RETAKE.</p>
+  <p>Model: <a href="https://huggingface.co/uhyon/mv2npp-gauge-pose">uhyon/mv2npp-gauge-pose</a> ·
+  Code: <a href="https://github.com/uhyon/mv2npp-gauge-reading">uhyon/mv2npp-gauge-reading</a> ·
+  Example photos: own synthetic renders and <a href="examples/ATTRIBUTION.md">CC BY 4.0 Roboflow images</a>.</p>
+</footer>
+</body>
+</html>

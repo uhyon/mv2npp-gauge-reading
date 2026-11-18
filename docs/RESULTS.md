@@ -568,3 +568,14 @@ one job at a time; median per photo (detection / keypoints / OCR):
   on MeterFL (73% either way) but turns 25 likely misreads into RETAKE.
 - The demo (`demo/app.py`) loads the model on the first request (about 1.3 s), then reads in
   0.4–0.6 s per photo.
+
+## Browser demo (static Space) vs. the Python reader (2026-11-18)
+
+`demo/web` runs the same reader in the browser (onnxruntime-web 1.20.1, WASM, one thread;
+`scripts/make_static_space.py` builds the static Hugging Face Space). It has no OCR: the range
+comes from the registry or the visitor. The dial fit (`geometry.js`) matches
+`perspective.fit_dial` to 1e-6 (`tests/test_web_geometry.py`). End to end on the 8 demo
+examples with the registry range (headless Chromium in the cloud container vs.
+`GaugeReader(ocr=False)`, same best.onnx), the values differ by at most 0.42% FS (median
+0.02%); the difference comes from image resampling (canvas vs. OpenCV). Time per photo in that
+container: about 1 s detection + 2–3.5 s for the three keypoint passes.
