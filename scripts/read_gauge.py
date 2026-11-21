@@ -1,14 +1,14 @@
 """Read gauges end to end: photo -> detection -> keypoints -> RETAKE checks -> OCR -> value.
 
     # one or more photos: prints one JSON line each
-    uv run python scripts/read_gauge.py --weights runs/pose/arc/weights/best.pt photo.jpg
+    uv run python scripts/read_gauge.py --weights runs/pose/arc_v5b/weights/best.pt photo.jpg
     uv run python scripts/read_gauge.py --weights ... photo.jpg --band 0.2 0.8   # LOW/HIGH/NORMAL
 
     # a test set manifest: writes a predictions CSV that evaluate.py scores
-    uv run python scripts/read_gauge.py --weights runs/pose/arc/weights/best.pt \\
-        --manifest data/processed/meterfl_manifest.csv --out runs/pose/arc/meterfl_e2e.csv
-    uv run python scripts/evaluate.py score meterfl --pred runs/pose/arc/meterfl_e2e.csv \\
-        --out runs/pose/arc/meterfl_e2e
+    uv run python scripts/read_gauge.py --weights runs/pose/arc_v5b/weights/best.pt \\
+        --manifest data/processed/meterfl_manifest.csv --out runs/pose/arc_v5b/meterfl_e2e.csv
+    uv run python scripts/evaluate.py score meterfl --pred runs/pose/arc_v5b/meterfl_e2e.csv \\
+        --out runs/pose/arc_v5b/meterfl_e2e
 
     # known instruments: range, unit and alarm band from a registry by tag; OCR only as backup
     uv run python scripts/read_gauge.py --weights ... --registry configs/gauges.csv --tag PI-101 photo.jpg

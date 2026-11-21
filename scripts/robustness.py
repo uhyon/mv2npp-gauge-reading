@@ -23,8 +23,8 @@ rotation median and the spread RETAKE), the range given as for a registered gaug
 ``--reader ocr`` lets OCR read the range too (the full pipeline for an unknown gauge).
 The report then also gives the RETAKE share (no value because the turned readings disagree).
 
-    uv run python scripts/robustness.py meterfl --weights runs/pose/arc/weights/best.pt \
-        --reader known --out runs/pose/arc/robust_meterfl_reader
+    uv run python scripts/robustness.py meterfl --weights runs/pose/arc_v5b/weights/best.pt \
+        --reader known --out runs/pose/arc_v5b/robust_meterfl_reader
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Gradio demo: read an analog gauge from a photo.
 
     uv run python demo/app.py                      # http://127.0.0.1:7860
-    GAUGE_WEIGHTS=runs/pose/arc/weights/best.onnx uv run python demo/app.py
+    GAUGE_WEIGHTS=runs/pose/arc_v5b/weights/best.onnx uv run python demo/app.py
 
 Pick the gauge's tag when it is a registered instrument (configs/gauges.csv): the range,
 unit and alarm band come from the registry, and OCR only checks the dial numbers. "Unknown
