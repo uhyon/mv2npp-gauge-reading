@@ -51,8 +51,8 @@ uv run python scripts/train_pose.py --data data/synthetic/synth_2d --fraction 0.
   and `--name`: a new Kaggle session has lost the run's copies of the data, so they are built
   again, with the keypoint count of the checkpoint.
 - Default model `yolo11s-pose.pt` (COCO-pretrained), 640 px, early stop after 15 epochs without gain.
-- The notebook names the run (`NAME`): Version 1 was `base`, Version 2 `rot`, Version 3 is
-  `arc`. Below, replace `runs/pose/base` with the run being evaluated.
+- The notebook names the run (`NAME`): Version 1 was `base`, Version 2 `rot`, Version 3 `arc`, Version 4
+  `arc_m`, Version 5 `arc_v5` and Version 5b (the default model since 2026-11-21) `arc_v5b`. Below, replace `runs/pose/base` with the run being evaluated.
 
 ## 2. Read the test sets (on the PC, CPU is enough)
 

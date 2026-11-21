@@ -579,3 +579,54 @@ examples with the registry range (headless Chromium in the cloud container vs.
 `GaugeReader(ocr=False)`, same best.onnx), the values differ by at most 0.42% FS (median
 0.02%); the difference comes from image resampling (canvas vs. OpenCV). Time per photo in that
 container: about 1 s detection + 2–3.5 s for the three keypoint passes.
+
+## Versions 5 and 5b: small gauges and dual scales (2026-11-18 / 21) — 5b is the default model
+
+Both keep the Version 3 setup (yolo11s-pose, 7 keypoints, rotation ±30°, 50 epochs) and change
+only the synthetic data (20,000 renders each):
+
+- **Version 5** (`configs/synth_2d_v5.yaml`, run `arc_v5`): scale arcs up to 320°, dual-scale
+  dials, gauges from 12% of the image. Worse on real photos: MeterFL (range given, one pass)
+  3.97% FS mean, 51% within 2% (v3 2.83 / 74%); Roboflow v4tii needle fraction 5.52 / 43%
+  (v3 3.00 / 70%). It reads real dials as too wide (MeterFL median fitted sweep 263 → 287°).
+  Not used.
+- **Version 5b** (`configs/synth_2d_v5b.yaml`, run `arc_v5b`, batch 16 on one T4): Version 5
+  without the wide arcs (180–270° as in synth_2d), keeping the small gauges and 30% dual-scale
+  dials.
+
+MeterFL, 262, range given (cloud container, same code for both models):
+
+| MeterFL 262 | Version 3 | Version 5b |
+| --- | --- | --- |
+| one pass (`predict_readings.py --pad 0.15`): FS mean / median / ≤2% FS | 2.83 / 1.09 / 74% | 3.07 / 1.41 / 65% |
+| `GaugeReader` (crop, rotation median, RETAKE): cover | 90% | 88% |
+| `GaugeReader`: FS mean / median / ≤2% FS of read photos | 1.79 / 0.96 / 81% | 1.36 / 0.78 / **86%** |
+| `GaugeReader`: ≤2% FS of all photos (RETAKE = miss) | 73% | 76% |
+
+On the 217 photos both models read, the mean error is the same within noise (1.38 vs 1.32% FS,
+paired bootstrap 95% CI of the difference −0.19 to +0.07), but more readings fall within 2% FS
+(81 → 87%; 19 photos only v5b gets within 2%, 6 only v3). The 19 photos v3 reads and v5b sends
+to RETAKE have a v3 error of 6.5% FS on average, so v5b's rotation spread also flags bad reads
+better. Version 5b alone is worse than v3 (one pass); it is better inside the reader.
+
+ER-05 on MeterFL with the reader, range given (≤2% FS of all photos, FS mean in brackets):
+
+| setting | Version 3 | Version 5b |
+| --- | --- | --- |
+| clean | 73% (1.79) | 76% (1.36) |
+| low light 1 / 2 / 3 | 69 / 67 / 64% (1.88 / 1.67 / 1.69) | 71 / 70 / 65% (1.19 / 1.28 / 1.52) |
+| radiation speckle 1 / 2 / 3 | 72 / 76 / 75% (2.18 / 2.05 / 1.62) | 76 / 73 / 75% (1.43 / 1.53 / 1.44) |
+| motion blur 1 / 2 / 3 | 76 / 63 / 37% (1.75 / 1.66 / 1.99) | 74 / 55 / 32% (1.23 / 1.57 / 1.95) |
+| RETAKE at motion blur 3 | 39% | 45% |
+
+The mean error drops in every setting; under strong blur v5b asks for a new photo more often.
+
+The ONNX export of Version 5b (what the demos run) gives, with the reader on MeterFL:
+cover 89%, 1.43% FS mean, 85% within 2% of read photos, 75% of all (PyTorch 88% / 1.36 / 86% /
+76%): small differences from preprocessing, at the edge of the 85% target. The browser demo with
+v5b reads the 8 examples like the Python reader (within 0.12% FS); `roboflow_dim.jpg` becomes a
+RETAKE (spread 5.7%, v3 4.5%).
+
+**Decision (user, 2026-11-21): Version 5b is the default model** (`runs/pose/arc_v5b/weights/`),
+which meets the ER-01 85% target on read photos (86%; ONNX 85%) but not on all photos (76%).
+Still to check on the work PC: MeasureBench and the synthetic val set.
