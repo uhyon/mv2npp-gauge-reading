@@ -41,8 +41,8 @@
 | NFR-02 재현성 | 🟡 | seed와 설정 파일은 있음. Weights & Biases 기록은 쓰지 않음 (Kaggle 출력 `results.csv`로 대신). README 명령 정리는 5단계 |
 | NFR-03 코드 품질 | ✅ | 단계별 모듈, `pytest` 201개 통과 |
 | NFR-04 ONNX | ✅ | `best.onnx`로 데모 동작 확인 (결과는 PyTorch와 거의 같음) |
-| NFR-05 README | ⏳ | 5단계 (성능표는 이 문서와 RESULTS에서) |
-| NFR-06 한계 명시 | 🟡 | DATASETS.md에 있음. README 한계 절은 5단계 |
+| NFR-05 README | ✅ | 2026-11-22: 성능표(v5b), 처리 흐름도, 버전별 변화, 데이터 출처, 빠른 시작, 데모 링크 |
+| NFR-06 한계 명시 | ✅ | README 'Limitations' 절 (2026-11-22), DATASETS.md |
 | NFR-07 MIT | ✅ | LICENSE |
 | DR-01–04, DR-08 | ✅ | DATASETS.md (MeterFL 30장 손 검수: 범위·단위 30/30 일치) |
 | DR-05 obaw9 분할 | 🟡 | 학습에 쓰지 않아 1,471장 전체를 평가에 사용. 분할 목록 대신 "전체 사용"으로 기록 |
