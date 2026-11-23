@@ -385,7 +385,8 @@ close-up through a crop of its own box instead let 2–5x more MeterFL photos fa
 Declined: 22 RETAKE, 22 no OCR range, 1 no gauge. On the read photos the full pipeline meets
 the ER-01 mean (≤ 2% FS) but not the 85% share within 2% FS.
 
-MeasureBench (142 photos, Version 3, PC CPU, 12 cores):
+MeasureBench (142 photos, Version 3, PC CPU, 12 cores; code of 2026-11-17, before the small-gauge
+framing; current-code numbers for v3 and v5b are in the Version 5b section):
 
 | MeasureBench, 142 | coverage | mean / median % FS (labelled) | ≤2% FS: read / all | interval hit: read / all | time per image (PC) |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -629,4 +630,34 @@ RETAKE (spread 5.7%, v3 4.5%).
 
 **Decision (user, 2026-11-21): Version 5b is the default model** (`runs/pose/arc_v5b/weights/`),
 which meets the ER-01 85% target on read photos (86%; ONNX 85%) but not on all photos (76%).
-Still to check on the work PC: MeasureBench and the synthetic val set.
+MeasureBench and the synthetic val split (work PC, 2026-11-23, code ffd16a0; v5b `best.pt`
+sha256 c951123a…). One pass, as in the Version 3 and 4 sections:
+
+| one pass | Version 3 | Version 5b |
+| --- | ---: | ---: |
+| Synthetic val (2,000, no margin): mean / median % FS | 0.66 / 0.49 | 0.71 / 0.50 |
+| Synthetic val within 2% FS | 96% | 96% |
+| Synthetic val, tilt 0–20° / 20–40° / 40°+ | 0.49 / 0.62 / 0.79 | 0.48 / 0.67 / 0.87 |
+| Model time per image, work PC CPU, synthetic val | 79 ms | 90 ms |
+| MeasureBench read (of 42 ranged) | 38 | 38 |
+| MeasureBench mean / median % FS | 15.94 / 8.32 | 14.24 / 4.82 |
+| MeasureBench within 2% FS / interval hit (read images) | 34% / 24% | 34% / 16% |
+
+MeasureBench, 142, with `GaugeReader` (both models re-run with the current code; the Version 3
+reader table above predates the small-gauge framing of 2026-11-18, which changes its numbers):
+
+| MeasureBench, 142 | GT range, v3 | GT range, v5b | OCR range, v3 | OCR range, v5b |
+| --- | ---: | ---: | ---: | ---: |
+| coverage | 13% | 15% | 46% | 44% |
+| mean / median % FS (labelled) | 6.58 / 1.43 | 2.80 / 1.90 | 3.14 / 2.68 | 2.33 / 2.10 |
+| ≤2% FS: read / all | 63% / 29% | 52% / 26% | 47% / 19% | 47% / 21% |
+| interval hit: read / all | 37% / 5% | 38% / 6% | 28% / 13% | 35% / 15% |
+| time per image (PC) | 360 ms | 347 ms | 494 ms | 506 ms |
+| RETAKE / no gauge / bad geometry | 52 / 15 / 1 | 53 / 11 / 2 | 52 / 15 / 1 | 53 / 11 / 2 |
+| no OCR range | – | – | 9 | 13 |
+
+The differences are noise. On the 15 labelled photos both models read, the mean error is the
+same (GT range 1.58 vs 1.60% FS; OCR range 2.25 vs 2.46, paired 95% CI of the difference
+−0.17 to +0.64); the lower v5b mean with GT range comes from which photos each model reads.
+On synthetic val v5b is slightly worse at high tilt. So Version 5b stays the default for its
+MeterFL reader result, and MeasureBench and synthetic val do not change that choice.
