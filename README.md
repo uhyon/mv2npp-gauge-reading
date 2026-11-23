@@ -53,7 +53,8 @@ How the model got here (MeterFL, range given, integrated reader where noted):
 | **5b + reader** | synthetic data with small gauges and dual-scale dials | **1.36 (read)** | **86% read / 76% all** |
 
 On our synthetic val split the dial-face fit removes almost all of the tilt error (Version 3:
-0.66% FS, 96% within 2%; 0.79% FS at 40°+ tilt, against 3.37% for Version 1).
+0.66% FS, 96% within 2%; 0.79% FS at 40°+ tilt, against 3.37% for Version 1; Version 5b:
+0.71% FS, 96%, 0.87% at 40°+). On MeasureBench Version 5b and Version 3 are equal within noise.
 
 ## How it works
 
@@ -102,8 +103,6 @@ flowchart LR
   registry; with OCR the full pipeline also misses the 0.5 s target (0.54 s).
 - **Dual-scale, tyre and wide-arc (> 270°) gauges** are weak points (see MeasureBench in
   [docs/RESULTS.md](docs/RESULTS.md)).
-- Version 5b has not yet been re-run on MeasureBench and the synthetic val split; those rows in
-  RESULTS.md are Version 3.
 
 ## Data
 
