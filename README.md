@@ -13,6 +13,10 @@ gauge generator and is tested on public real photos.
 your CPU, the photo is not uploaded) · **Model:**
 [uhyon/mv2npp-gauge-pose](https://huggingface.co/uhyon/mv2npp-gauge-pose) (`best.onnx`, `best.pt`)
 
+**Blog series** (Naver blog): 1. [Training without real photos: the synthetic gauge generator](https://blog.naver.com/u_hyon/224488569416) ·
+2. [Read the needle on the dial face (7 keypoints and a homography)](https://blog.naver.com/u_hyon/224488585214) ·
+3. [A reader that asks for another photo (RETAKE, registry, robustness)](https://blog.naver.com/u_hyon/224488587930)
+
 ![Readings on the demo examples](docs/img/demo_results.jpg)
 
 *Version 5b, range from the gauge registry. Top: our synthetic renders (clean, 50° tilt, low
