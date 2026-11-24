@@ -27,16 +27,16 @@ const T = {
     ocrLoading: "OCR 모델 불러오는 중… (처음 한 번, 약 16 MB)", ocrFail: "OCR 모델을 불러오지 못했습니다: ",
     src: { given: "등록부", ocr: "OCR (문자판 숫자)", custom: "직접 입력" },
     cols: ["사진", "태그", "판독값", "단위", "눈금", "범위 출처", "상태", "회전 차이 %", "시간 ms"],
-    keys: ["상태", "눈금 범위", "범위 출처", "경보 범위", "바늘 위치", "회전 판독 차이", "문자판 맞춤", "처리 시간"],
+    keys: ["상태", "눈금 범위", "범위 출처", "경보 범위", "바늘 위치", "세 판독값 최대−최소", "문자판 맞춤", "처리 시간"],
     read: "판독", pending: "판독 중…", waiting: "대기", needScale: "범위 필요",
     needScaleHint: "눈금 범위를 입력하고 적용을 누르세요.",
-    st: { ok: "판독", retake: "재촬영: 회전 판독 차이 5% 초과", bad_geometry: "재촬영: 눈금 키포인트 불량",
+    st: { ok: "판독", retake: "재촬영: 세 판독값의 최대−최소 차이가 눈금의 5% 초과", bad_geometry: "재촬영: 눈금 키포인트 불량",
       no_gauge: "재촬영: 계기 없음", no_scale: "눈금 숫자를 못 읽음: 오른쪽에서 범위를 직접 입력하세요" },
     summary: (n, ok, al, rt) => `점검 ${n}건 · 판독 ${ok} · 경보 ${al} · 재촬영 ${rt}`,
     fastNo: "확인 안 함 (빠른 모드)",
     aboutHtml: `<h3>mv2npp · 아날로그 계기 자동 판독</h3>
 <p>원전 현장 순시용 머신비전 연구. 합성 렌더로만 학습한 YOLO11s-pose 모델(v5b)이 계기와 7개 키포인트를 찾고,
-문자판을 정면으로 보정해 바늘을 읽습니다. 세 번(정자세, ±25° 회전) 읽어 5% 넘게 다르면 재촬영(RETAKE)을 요청합니다.
+문자판을 정면으로 보정해 바늘을 읽습니다. 세 번(정자세, ±25° 회전) 읽어 가장 큰 값과 가장 작은 값의 차이가 눈금의 5%를 넘으면 재촬영(RETAKE)을 요청합니다.
 모든 계산은 브라우저에서 하며 사진은 업로드되지 않습니다.</p>
 <p>등록된 계기(예시 등록부, 가상의 태그)는 등록부의 범위·단위·경보 범위를 쓰고, 미등록 계기는 문자판 숫자를
 OCR(PP-OCRv4, RapidOCR의 ONNX 모델)로 읽어 첫 눈금과 끝 눈금을 정합니다. 숫자를 못 읽으면 범위를 직접 입력할 수 있습니다.
@@ -59,10 +59,10 @@ OCR(PP-OCRv4, RapidOCR의 ONNX 모델)로 읽어 첫 눈금과 끝 눈금을 정
     ocrLoading: "Loading the OCR models… (once, about 16 MB)", ocrFail: "Could not load the OCR models: ",
     src: { given: "registry", ocr: "OCR (dial numbers)", custom: "entered" },
     cols: ["Photo", "Tag", "Value", "Unit", "Scale", "Range from", "Status", "Spread %", "Time ms"],
-    keys: ["Status", "Scale range", "Range from", "Alarm band", "Needle position", "Spread of 3 reads", "Dial fit", "Time"],
+    keys: ["Status", "Scale range", "Range from", "Alarm band", "Needle position", "Max − min of 3 reads", "Dial fit", "Time"],
     read: "read", pending: "reading…", waiting: "waiting", needScale: "range needed",
     needScaleHint: "Enter the scale range and press Apply.",
-    st: { ok: "read", retake: "RETAKE: the three reads differ by more than 5%",
+    st: { ok: "read", retake: "RETAKE: max − min of the three reads is over 5% of scale",
       bad_geometry: "RETAKE: scale keypoints unusable", no_gauge: "RETAKE: no gauge found",
       no_scale: "Dial numbers not read: enter the range on the right" },
     summary: (n, ok, al, rt) => `${n} photos · ${ok} read · ${al} alarms · ${rt} retakes`,
@@ -70,8 +70,8 @@ OCR(PP-OCRv4, RapidOCR의 ONNX 모델)로 읽어 첫 눈금과 끝 눈금을 정
     aboutHtml: `<h3>mv2npp · analog gauge reader</h3>
 <p>A machine-vision study for nuclear power plant rounds. A YOLO11s-pose model (version 5b) trained only on
 synthetic renders finds the gauge and seven keypoints, the dial is straightened, and the needle is read on its
-face. Each photo is read three times (upright and turned ±25°); if the reads differ by more than 5% of the
-scale the answer is RETAKE. Everything runs in your browser; photos are not uploaded.</p>
+face. Each photo is read three times (upright and turned ±25°); if the highest and lowest
+reads are more than 5% of the scale apart, the answer is RETAKE. Everything runs in your browser; photos are not uploaded.</p>
 <p>A registered gauge (example registry, made-up tags) takes its range, unit and alarm band from the registry; an
 unregistered gauge has its dial numbers read with OCR (PP-OCRv4, the ONNX models of RapidOCR) to find the first and
 last scale values. When no numbers are read, the range can be entered by hand. Not validated on real plant photos.</p>
