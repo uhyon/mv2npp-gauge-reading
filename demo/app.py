@@ -5,8 +5,8 @@
 
 Pick the gauge's tag when it is a registered instrument (configs/gauges.csv): the range,
 unit and alarm band come from the registry, and OCR only checks the dial numbers. "Unknown
-gauge" reads the range with OCR. Example images: own synthetic renders and CC BY 4.0 Roboflow
-photos only (demo/examples/ATTRIBUTION.md).
+gauge" reads the range with OCR. Example images: own synthetic renders (two on CC BY 2.0
+background photos) and CC BY 4.0 Roboflow photos (demo/examples/ATTRIBUTION.md).
 """
 
 from __future__ import annotations
@@ -146,7 +146,8 @@ with gr.Blocks(title="Analog gauge reader") as app:
     if ex:
         gr.Examples(ex, [inp, tag, fast, check], [out_img, out_front, out_txt], fn=run,
                     cache_examples=False)
-    gr.Markdown("Example images: own synthetic renders and CC BY 4.0 Roboflow Universe photos; "
+    gr.Markdown("Example images: own synthetic renders (two on CC BY 2.0 background photos) and "
+                "CC BY 4.0 Roboflow Universe photos; "
                 "see demo/examples/ATTRIBUTION.md.")
 
 if __name__ == "__main__":
