@@ -1,14 +1,83 @@
-// Page logic of the browser demo: model loading, inputs, drawing the reading.
+// Page logic of the browser demo: a round-check layout (photo list, step tabs, meter, details,
+// results table, CSV) like the desktop app. Reading in reader.js, geometry in geometry.js.
 import { GaugeReader } from "./reader.js";
 import { frontalMatrix, inv3, project } from "./geometry.js";
+import { meterSvg, statusOf, STATUS_COLORS } from "./meter.js";
 
 const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
-const MODEL_URL = new URLSearchParams(location.search).get("model")
+const PARAMS = new URLSearchParams(location.search);
+const MODEL_URL = PARAMS.get("model")
   || "https://huggingface.co/uhyon/mv2npp-gauge-pose/resolve/main/best.onnx";
 const CUSTOM = "__custom__";
 const $ = (id) => document.getElementById(id);
 
-let reader = null, photo = null, registry = {};
+const T = {
+  ko: {
+    title: "mv2npp 계기 순시 점검", open: "📷 사진 열기", examples: "🖼 예시 사진",
+    readall: "▶ 전체 다시 판독", csv: "💾 보고서 저장 (CSV)", about: "ⓘ 정보", apply: "적용",
+    listEmpty: "사진을 열거나 여기로 끌어다 놓으세요. 예시 사진도 있습니다.",
+    tabDrawn: "검출 · 키포인트", tabFront: "정면 보정", tabPhoto: "원본",
+    viewEmpty: "왼쪽에서 사진을 고르세요.", tag: "계기 태그", fast: "빠른 모드 (회전 검증 없이 1회 판독)",
+    modelLoading: "모델 불러오는 중…", modelReady: "모델 v5b (ONNX, 브라우저 CPU)",
+    modelFail: "모델을 불러오지 못했습니다: ",
+    limits: "합성 데이터로만 학습 · 실제 원전 사진 미검증 · 사진은 업로드되지 않음",
+    custom: "미등록 계기: 눈금 범위 직접 입력",
+    cols: ["사진", "태그", "판독값", "단위", "눈금", "상태", "회전 차이 %", "시간 ms"],
+    keys: ["상태", "눈금 범위", "경보 범위", "바늘 위치", "회전 판독 차이", "문자판 맞춤", "검출 신뢰도", "처리 시간"],
+    read: "판독", pending: "판독 중…", waiting: "대기", needScale: "범위 필요",
+    needScaleHint: "이 사진은 등록된 태그가 없습니다. 오른쪽에서 태그를 고르거나 눈금 범위를 입력하세요.",
+    st: { ok: "판독", retake: "재촬영: 회전 판독 차이 5% 초과", bad_geometry: "재촬영: 눈금 키포인트 불량",
+      no_gauge: "재촬영: 계기 없음" },
+    summary: (n, ok, al, rt) => `점검 ${n}건 · 판독 ${ok} · 경보 ${al} · 재촬영 ${rt}`,
+    fastNo: "확인 안 함 (빠른 모드)",
+    aboutHtml: `<h3>mv2npp · 아날로그 계기 자동 판독</h3>
+<p>원전 현장 순시용 머신비전 연구. 합성 렌더로만 학습한 YOLO11s-pose 모델(v5b)이 계기와 7개 키포인트를 찾고,
+문자판을 정면으로 보정해 바늘을 읽습니다. 세 번(정자세, ±25° 회전) 읽어 5% 넘게 다르면 재촬영(RETAKE)을 요청합니다.
+모든 계산은 브라우저에서 하며 사진은 업로드되지 않습니다.</p>
+<p>이 웹 버전은 OCR이 없어서 눈금 범위를 예시 계기 등록부(가상의 태그)나 직접 입력으로 받습니다.
+Python 버전과 Windows 데스크톱 앱은 문자판 숫자도 OCR로 읽습니다. 실제 원전 사진으로는 검증하지 않았습니다.</p>
+<p>코드·결과: <a href="https://github.com/uhyon/mv2npp-gauge-reading" target="_blank">github.com/uhyon/mv2npp-gauge-reading</a> (MIT) ·
+모델: <a href="https://huggingface.co/uhyon/mv2npp-gauge-pose" target="_blank">uhyon/mv2npp-gauge-pose</a><br>
+예시 사진: 자체 합성 렌더(두 장은 CC BY 2.0 배경 사진 위), Roboflow Universe 사진(CC BY 4.0) ·
+<a href="examples/ATTRIBUTION.md" target="_blank">출처</a></p>`,
+  },
+  en: {
+    title: "mv2npp gauge round", open: "📷 Open photos", examples: "🖼 Examples",
+    readall: "▶ Read all again", csv: "💾 Save report (CSV)", about: "ⓘ About", apply: "Apply",
+    listEmpty: "Open photos or drop them here. Example photos are available too.",
+    tabDrawn: "Detection · keypoints", tabFront: "Frontal view", tabPhoto: "Original",
+    viewEmpty: "Pick a photo on the left.", tag: "Gauge tag", fast: "Fast mode (one pass, no rotation check)",
+    modelLoading: "Loading the model…", modelReady: "Model v5b (ONNX, browser CPU)",
+    modelFail: "Could not load the model: ",
+    limits: "Trained on synthetic data only · not validated on real plant photos · photos are not uploaded",
+    custom: "Unregistered gauge: enter the scale range",
+    cols: ["Photo", "Tag", "Value", "Unit", "Scale", "Status", "Spread %", "Time ms"],
+    keys: ["Status", "Scale range", "Alarm band", "Needle position", "Spread of 3 reads", "Dial fit", "Detection conf.", "Time"],
+    read: "read", pending: "reading…", waiting: "waiting", needScale: "range needed",
+    needScaleHint: "This photo has no registered tag. Pick a tag or enter the scale range on the right.",
+    st: { ok: "read", retake: "RETAKE: the three reads differ by more than 5%",
+      bad_geometry: "RETAKE: scale keypoints unusable", no_gauge: "RETAKE: no gauge found" },
+    summary: (n, ok, al, rt) => `${n} photos · ${ok} read · ${al} alarms · ${rt} retakes`,
+    fastNo: "not checked (fast mode)",
+    aboutHtml: `<h3>mv2npp · analog gauge reader</h3>
+<p>A machine-vision study for nuclear power plant rounds. A YOLO11s-pose model (version 5b) trained only on
+synthetic renders finds the gauge and seven keypoints, the dial is straightened, and the needle is read on its
+face. Each photo is read three times (upright and turned ±25°); if the reads differ by more than 5% of the
+scale the answer is RETAKE. Everything runs in your browser; photos are not uploaded.</p>
+<p>This web version has no OCR: the scale range comes from an example registry (made-up tags) or your input.
+The Python version and the Windows desktop app also read the dial numbers with OCR. Not validated on real plant photos.</p>
+<p>Code and results: <a href="https://github.com/uhyon/mv2npp-gauge-reading" target="_blank">github.com/uhyon/mv2npp-gauge-reading</a> (MIT) ·
+model: <a href="https://huggingface.co/uhyon/mv2npp-gauge-pose" target="_blank">uhyon/mv2npp-gauge-pose</a><br>
+Example photos: own synthetic renders (two on CC BY 2.0 background photos) and Roboflow Universe photos
+(CC BY 4.0) · <a href="examples/ATTRIBUTION.md" target="_blank">credits</a></p>`,
+  },
+};
+let lang = PARAMS.get("lang") === "en" ? "en" : "ko";
+const t = () => T[lang];
+
+let reader = null, registry = {}, exampleList = [];
+const items = [];
+let current = -1, view = "drawn", busy = false;
 
 // gauges.csv: tag,scale_min,scale_max,unit,alarm_low,alarm_high,description ('#' comments)
 function parseRegistry(text) {
@@ -25,82 +94,194 @@ function parseRegistry(text) {
   return out;
 }
 
-function fmt(v) {
-  return Number.isFinite(v) ? Number(v.toPrecision(4)).toString() : "–";
-}
-
+const fmt = (v) => (Number.isFinite(v) ? Number(v.toPrecision(4)).toString() : "–");
 // a reading to 1/1000 of the span (finer would claim more than the model reads)
 function fmtValue(v, span) {
   const d = Math.max(0, Math.min(6, 3 - Math.floor(Math.log10(Math.abs(span) || 1))));
   return v.toFixed(d);
 }
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-function setupTags() {
-  const sel = $("tag");
-  for (const g of Object.values(registry)) {
-    sel.append(new Option(`${g.tag}: ${fmt(g.min)}–${fmt(g.max)} ${g.unit}`, g.tag));
+function scaleOf(it) {
+  const g = registry[it.tag];
+  if (g) return [{ min: g.min, max: g.max, unit: g.unit }, g.low != null || g.high != null ? { low: g.low, high: g.high } : null];
+  return [it.custom || null, null];
+}
+
+function stateOf(it) {
+  if (it.error) return "ERROR";
+  if (it.reading) return statusOf(it.reading) || t().read;
+  if (!scaleOf(it)[0]) return t().needScale;
+  return it.queued ? t().pending : t().waiting;
+}
+
+// ---- adding photos
+async function addBlob(blob, name, tag = null) {
+  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+  items.push({ name, tag: registry[tag] ? tag : null, bitmap, thumb: URL.createObjectURL(blob),
+    reading: null, custom: null, queued: false, error: "" });
+  return items.length - 1;
+}
+
+async function addFiles(files) {
+  const first = items.length;
+  for (const f of files) if (f.type.startsWith("image/")) {
+    const m = f.name.match(/^([^_]+)__/);
+    await addBlob(f, f.name, m ? m[1] : null);
   }
-  sel.append(new Option("Other gauge: enter the range", CUSTOM));
-  sel.addEventListener("change", showTag);
-  showTag();
+  afterAdd(first);
 }
 
-function showTag() {
-  const g = registry[$("tag").value];
-  $("custom").hidden = !!g;
-  if (!g) { $("taginfo").textContent = "Range and unit as printed on the dial."; return; }
-  let band = "";
-  if (g.low != null && g.high != null) band = ` Normal band ${fmt(g.low)} to ${fmt(g.high)} ${g.unit}.`;
-  else if (g.high != null) band = ` HIGH above ${fmt(g.high)} ${g.unit}.`;
-  else if (g.low != null) band = ` LOW below ${fmt(g.low)} ${g.unit}.`;
-  $("taginfo").textContent = `${g.description}.${band}`;
-}
-
-function currentScale() {
-  const g = registry[$("tag").value];
-  if (g) return [{ min: g.min, max: g.max, unit: g.unit },
-    g.low != null || g.high != null ? { low: g.low, high: g.high } : null];
-  const min = Number($("cmin").value), max = Number($("cmax").value);
-  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [null, null];
-  return [{ min, max, unit: $("cunit").value.trim() }, null];
-}
-
-async function setPhoto(blob, tag) {
-  photo = await createImageBitmap(blob, { imageOrientation: "from-image" });
-  if (tag && registry[tag]) { $("tag").value = tag; showTag(); }
-  const c = $("drawn");
-  c.width = photo.width; c.height = photo.height;
-  c.getContext("2d").drawImage(photo, 0, 0);
-  const f = $("frontal").getContext("2d");
-  f.clearRect(0, 0, 320, 320);
-  $("summary").innerHTML = '<p class="hint">Ready to read.</p>';
-  $("read").disabled = !reader;
-  if (reader) await run();
-}
-
-async function setupExamples() {
-  let list = [];
-  try { list = await (await fetch("examples/index.json")).json(); } catch { return; }
-  const box = $("examples");
-  for (const ex of list) {
-    const b = document.createElement("button");
-    b.title = ex.tag ? `${ex.file} (${ex.tag})` : ex.file;
-    b.innerHTML = `<img src="examples/${ex.file}" alt="${ex.file}" loading="lazy">`;
-    b.addEventListener("click", async () => {
-      box.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
-      b.classList.add("active");
-      await setPhoto(await (await fetch(`examples/${ex.file}`)).blob(), ex.tag);
-    });
-    box.append(b);
+async function addExamples() {
+  const first = items.length;
+  const have = new Set(items.map((it) => it.name));
+  for (const ex of exampleList) {
+    if (have.has(ex.file)) continue;
+    await addBlob(await (await fetch(`examples/${ex.file}`)).blob(), ex.file, ex.tag);
   }
+  afterAdd(first);
+}
+
+function afterAdd(first) {
+  if (items.length === first) return;
+  for (let i = first; i < items.length; i++) items[i].queued = !!scaleOf(items[i])[0];
+  renderList(); renderTable();
+  if (current < 0) select(first);
+  pump();
+}
+
+// ---- reading, one photo at a time
+async function pump() {
+  if (busy || !reader) return;
+  const i = items.findIndex((it) => it.queued);
+  if (i < 0) return;
+  busy = true;
+  const it = items[i];
+  const [scale, band] = scaleOf(it);
+  try {
+    await new Promise((r) => setTimeout(r, 10));
+    it.reading = await reader.read(it.bitmap, scale, band, $("fast").checked);
+    it.reading.fast = $("fast").checked;
+    it.error = "";
+  } catch (e) {
+    console.error(e);
+    it.error = e.message;
+  }
+  it.queued = false;
+  busy = false;
+  renderList(); renderTable();
+  if (i === current) showCurrent();
+  pump();
+}
+
+function requeue(i) {
+  const it = items[i];
+  it.reading = null; it.error = "";
+  it.queued = !!scaleOf(it)[0];
+  renderList(); renderTable();
+  if (i === current) showCurrent();
+  pump();
+}
+
+// ---- list and table
+function valueText(it) {
+  const r = it.reading;
+  return r && r.value != null ? `${fmtValue(r.value, r.scaleMax - r.scaleMin)} ${r.unit}`.trim() : "–";
+}
+
+function colorOf(it) {
+  return it.reading ? STATUS_COLORS[statusOf(it.reading)] : "#64748b";
+}
+
+function renderList() {
+  const box = $("list");
+  if (!items.length) { box.innerHTML = `<p class="empty">${t().listEmpty}</p>`; return; }
+  box.innerHTML = items.map((it, i) => `<div class="item${i === current ? " active" : ""}" data-i="${i}">
+    <img src="${it.thumb}" alt="">
+    <div class="meta"><div class="name">${esc(it.tag || "–")} · ${esc(it.name)}</div>
+    <div class="val" style="color:${colorOf(it)}"><span class="dot" style="background:${colorOf(it)}"></span>${esc(valueText(it))}</div>
+    <div class="name">[${esc(stateOf(it))}]</div></div></div>`).join("");
+  box.querySelectorAll(".item").forEach((el) => el.addEventListener("click", () => select(+el.dataset.i)));
+}
+
+function renderTable() {
+  $("table").tHead.innerHTML = `<tr>${t().cols.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+  $("table").tBodies[0].innerHTML = items.map((it, i) => {
+    const r = it.reading, st = stateOf(it);
+    const cells = [it.name, it.tag || "–", r && r.value != null ? fmtValue(r.value, r.scaleMax - r.scaleMin) : "–",
+      r && r.unit ? r.unit : "–", r && r.scaleMin != null ? `${fmt(r.scaleMin)}–${fmt(r.scaleMax)}` : "–", st,
+      r && r.spread != null ? r.spread.toFixed(1) : "–",
+      r ? Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0)) : "–"];
+    return `<tr data-i="${i}">${cells.map((c, j) => `<td class="${j === 5 ? esc(st) : ""}">${esc(c)}</td>`).join("")}</tr>`;
+  }).join("");
+  $("table").querySelectorAll("tbody tr").forEach((el) => el.addEventListener("click", () => select(+el.dataset.i)));
+  const sts = items.map((it) => (it.reading ? statusOf(it.reading) : null));
+  $("summary").textContent = items.length ? t().summary(items.length,
+    sts.filter((s) => s !== null && s !== "RETAKE").length,
+    sts.filter((s) => s === "HIGH" || s === "LOW").length, sts.filter((s) => s === "RETAKE").length) : "";
+}
+
+// ---- the selected photo
+function select(i) {
+  current = i;
+  renderList();
+  showCurrent();
+}
+
+function setTagSelect(it) {
+  $("tag").value = it.tag || CUSTOM;
+  $("custom").hidden = !!it.tag;
+  if (!it.tag && it.custom) {
+    $("cmin").value = it.custom.min; $("cmax").value = it.custom.max; $("cunit").value = it.custom.unit;
+  }
+}
+
+function showCurrent() {
+  const it = items[current];
+  if (!it) return;
+  setTagSelect(it);
+  const r = it.reading;
+  drawPhoto($("photo"), it.bitmap);
+  if (r) { drawReading($("drawn"), it.bitmap, r); drawFrontal($("frontal"), it.bitmap, r); } else {
+    drawPhoto($("drawn"), it.bitmap);
+    const f = $("frontal").getContext("2d"); f.fillStyle = "#0f172a"; f.fillRect(0, 0, 420, 420);
+  }
+  showView();
+  const g = registry[it.tag];
+  const band = g && (g.low != null || g.high != null) ? { low: g.low, high: g.high } : null;
+  $("meter").innerHTML = meterSvg(r, band, r && r.value != null ? fmtValue(r.value, r.scaleMax - r.scaleMin) : "");
+  const k = t().keys;
+  const rows = !r ? [[k[0], it.error || (scaleOf(it)[0] ? t().pending : t().needScaleHint)]] : [
+    [k[0], r.value != null ? (statusOf(r) || t().read) : (t().st[r.status] || r.status), STATUS_COLORS[statusOf(r)]],
+    [k[1], r.scaleMin != null ? `${fmt(r.scaleMin)}–${fmt(r.scaleMax)} ${r.unit}` : "–"],
+    [k[2], band ? `${band.low != null ? fmt(band.low) : ""}–${band.high != null ? fmt(band.high) : ""} ${g.unit}` : "–"],
+    [k[3], r.fraction != null ? `${(r.fraction * 100).toFixed(1)}%` : "–"],
+    [k[4], r.fast ? t().fastNo : r.spread != null ? `${r.spread.toFixed(1)}% FS` : "–"],
+    [k[5], r.fit ? `${r.fit.sweep.toFixed(0)}°, rms ${(r.fit.rms * 100).toFixed(1)}%` : "–"],
+    [k[6], r.boxConf != null ? r.boxConf.toFixed(2) : "–"],
+    [k[7], `${Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0))} ms`],
+  ];
+  $("kv").innerHTML = rows.map(([a, b, c]) => `<div class="card"${rows.length === 1 ? ' style="grid-column:1/-1"' : ""}><b>${a}</b><span${c ? ` style="color:${c}"` : ""}>${esc(b)}</span></div>`).join("");
+}
+
+function showView() {
+  const has = current >= 0;
+  for (const id of ["drawn", "frontal", "photo"]) $(id).hidden = !has || id !== view;
+  $("viewhint").hidden = has;
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+}
+
+// ---- drawing
+function drawPhoto(c, bm) {
+  c.width = bm.width; c.height = bm.height;
+  c.getContext("2d").drawImage(bm, 0, 0);
 }
 
 const COLORS = { NORMAL: "#3caa3c", "": "#3caa3c", LOW: "#f08c28", HIGH: "#dc2828", RETAKE: "#e6a000" };
 
-function drawReading(r) {
-  const c = $("drawn"), g = c.getContext("2d");
-  c.width = photo.width; c.height = photo.height;
-  g.drawImage(photo, 0, 0);
+function drawReading(c, bm, r) {
+  drawPhoto(c, bm);
+  const g = c.getContext("2d");
   const s = Math.max(1, Math.max(c.width, c.height) / 640);
   const lw = Math.max(1, Math.round(2 * s)), rad = Math.max(2, Math.round(4 * s));
   const color = COLORS[r.value != null ? r.alarm : "RETAKE"] || COLORS.NORMAL;
@@ -151,16 +332,16 @@ function drawReading(r) {
   g.fillText(text, x + 6, y - 2);
 }
 
-function drawFrontal(r) {
-  const size = 320, c = $("frontal"), g = c.getContext("2d");
+function drawFrontal(c, bm, r) {
+  const size = 420, g = c.getContext("2d");
   g.fillStyle = "rgb(114,114,114)";
   g.fillRect(0, 0, size, size);
   if (!r.fit) return;
   const m = inv3(frontalMatrix(r.fit, size, 0.34));
   const src = document.createElement("canvas");
-  src.width = photo.width; src.height = photo.height;
+  src.width = bm.width; src.height = bm.height;
   const sg = src.getContext("2d", { willReadFrequently: true });
-  sg.drawImage(photo, 0, 0);
+  sg.drawImage(bm, 0, 0);
   const sp = sg.getImageData(0, 0, src.width, src.height).data, W = src.width, H = src.height;
   const out = g.getImageData(0, 0, size, size), op = out.data;
   for (let v = 0; v < size; v++) {
@@ -180,82 +361,97 @@ function drawFrontal(r) {
   g.putImageData(out, 0, 0);
 }
 
-const STATUS_TEXT = {
-  ok: "read", no_gauge: "no gauge found", bad_geometry: "keypoints do not form a usable scale arc",
-  retake: "the three readings disagree by more than 5% of scale",
-};
-
-function showSummary(r, fast) {
-  const ok = r.value != null;
-  const badge = ok ? (r.alarm ? `<span class="badge ${r.alarm}">${r.alarm}</span>` : "")
-    : '<span class="badge RETAKE">RETAKE</span>';
-  const rows = [
-    ["Status", STATUS_TEXT[r.status] || r.status],
-    ["Scale", ok ? `${fmt(r.scaleMin)} to ${fmt(r.scaleMax)} ${r.unit}` : "–"],
-    ["Needle position", r.fraction != null ? `${(r.fraction * 100).toFixed(1)}% of scale` : "–"],
-    ["Spread of 3 readings", fast ? "not checked (fast mode)" : r.spread != null ? `${r.spread.toFixed(1)}% of scale` : "–"],
-    ["Fitted scale arc", r.fit ? `${r.fit.sweep.toFixed(0)}°, fit error ${(r.fit.rms * 100).toFixed(1)}% of radius` : "–"],
-    ["Framing", r.framing ? `${r.framing} (gauge box ${(r.boxShare * 100).toFixed(0)}% of photo)` : "–"],
-    ["Detection confidence", r.boxConf != null ? r.boxConf.toFixed(2) : "–"],
-    ["Time", Object.entries(r.ms).map(([k, v]) => `${k} ${Math.round(v)} ms`).join(", ")],
-  ];
-  $("summary").innerHTML = `<div class="value">${ok ? `${fmtValue(r.value, r.scaleMax - r.scaleMin)} ${r.unit}` : "No reading"}${badge}</div>`
-    + `<table>${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")}</table>`;
+// ---- report, language, inputs
+function saveCsv() {
+  if (!items.length) return;
+  const head = ["photo", "tag", "status", "alarm", "value", "unit", "scale_min", "scale_max",
+    "needle_fraction", "spread_pct", "ms"];
+  const q = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+  const rows = items.map((it) => {
+    const r = it.reading || {};
+    return [it.name, it.tag || "", r.status || it.error || "", r.alarm || "",
+      r.value != null ? Number(r.value.toPrecision(6)) : "", r.unit || "", r.scaleMin, r.scaleMax,
+      r.fraction != null ? r.fraction.toFixed(4) : "", r.spread != null ? r.spread.toFixed(2) : "",
+      r.ms ? Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0)) : ""].map(q).join(",");
+  });
+  const blob = new Blob(["﻿" + [head.join(","), ...rows].join("\n")], { type: "text/csv" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "gauge_round.csv" });
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-async function run() {
-  if (!photo || !reader) return;
-  const [scale, band] = currentScale();
-  if (!scale) { $("status").textContent = "Enter a scale range with min ≠ max."; return; }
-  $("read").disabled = true;
-  $("status").textContent = "Reading…";
-  await new Promise((r) => setTimeout(r, 20));
-  try {
-    const fast = $("fast").checked;
-    const r = await reader.read(photo, scale, band, fast);
-    drawReading(r);
-    drawFrontal(r);
-    showSummary(r, fast);
-    window.lastReading = r;
-    $("status").textContent = "Done.";
-  } catch (e) {
-    console.error(e);
-    $("status").textContent = `Error: ${e.message}`;
-  } finally {
-    $("read").disabled = false;
-  }
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n;
+    if (key === "modelLoading" && reader) { el.textContent = t().modelReady; return; }
+    if (t()[key]) el.textContent = t()[key];
+  });
+  $("lang").textContent = lang === "ko" ? "EN" : "한국어";
+  const sel = $("tag"), keep = sel.value;
+  sel.innerHTML = "";
+  for (const g of Object.values(registry)) sel.append(new Option(`${g.tag}: ${fmt(g.min)}–${fmt(g.max)} ${g.unit}`, g.tag));
+  sel.append(new Option(t().custom, CUSTOM));
+  if (keep) sel.value = keep;
+  renderList(); renderTable(); showCurrent();
 }
 
 function setupInputs() {
-  $("file").addEventListener("change", (e) => e.target.files[0] && setPhoto(e.target.files[0]));
+  $("file").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
+  $("examples").addEventListener("click", addExamples);
+  $("readall").addEventListener("click", () => items.forEach((_, i) => requeue(i)));
+  $("csv").addEventListener("click", saveCsv);
+  $("about").addEventListener("click", () => { $("dlgbody").innerHTML = t().aboutHtml; $("dlg").showModal(); });
+  $("lang").addEventListener("click", () => { lang = lang === "ko" ? "en" : "ko"; applyLang(); });
+  document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => { view = b.dataset.view; showView(); }));
+  $("tag").addEventListener("change", () => {
+    const it = items[current];
+    const v = $("tag").value;
+    $("custom").hidden = v !== CUSTOM;
+    if (!it) return;
+    it.tag = v === CUSTOM ? null : v;
+    requeue(current);
+  });
+  $("capply").addEventListener("click", () => {
+    const it = items[current];
+    const min = Number($("cmin").value), max = Number($("cmax").value);
+    if (!it || !Number.isFinite(min) || !Number.isFinite(max) || min === max) return;
+    it.tag = null;
+    it.custom = { min, max, unit: $("cunit").value.trim() };
+    requeue(current);
+  });
   const drop = $("drop");
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", () => drop.classList.remove("over"));
   drop.addEventListener("drop", (e) => {
     e.preventDefault(); drop.classList.remove("over");
-    if (e.dataTransfer.files[0]) setPhoto(e.dataTransfer.files[0]);
+    addFiles([...e.dataTransfer.files]);
   });
-  $("read").addEventListener("click", run);
 }
 
 async function main() {
   setupInputs();
   try { registry = parseRegistry(await (await fetch("gauges.csv")).text()); } catch { registry = {}; }
-  setupTags();
-  setupExamples();
+  try { exampleList = await (await fetch("examples/index.json")).json(); } catch { exampleList = []; }
+  applyLang();
+  renderTable();
+  showView();
+  $("meter").innerHTML = meterSvg(null, null, "");
   const ort = window.ort;
   ort.env.wasm.wasmPaths = ORT_DIST;
   ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+  addExamples();      // the examples are listed at once and read when the model is ready
   try {
     reader = await GaugeReader.load(ort, MODEL_URL, (got, total) => {
-      $("status").textContent = `Loading the model… ${(got / 1e6).toFixed(0)}${total ? ` / ${(total / 1e6).toFixed(0)}` : ""} MB`;
+      $("model").textContent = `${t().modelLoading} ${(got / 1e6).toFixed(0)}${total ? ` / ${(total / 1e6).toFixed(0)}` : ""} MB`;
     });
-    $("status").textContent = "Model ready.";
+    $("model").textContent = t().modelReady;
     window.gaugeReader = reader;
-    if (photo) { $("read").disabled = false; await run(); }
+    window.gaugeItems = items;
+    pump();
   } catch (e) {
     console.error(e);
-    $("status").textContent = `Could not load the model: ${e.message}`;
+    $("model").textContent = t().modelFail + e.message;
   }
 }
 
