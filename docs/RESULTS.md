@@ -661,3 +661,26 @@ same (GT range 1.58 vs 1.60% FS; OCR range 2.25 vs 2.46, paired 95% CI of the di
 −0.17 to +0.64); the lower v5b mean with GT range comes from which photos each model reads.
 On synthetic val v5b is slightly worse at high tilt. So Version 5b stays the default for its
 MeterFL reader result, and MeasureBench and synthetic val do not change that choice.
+
+MeasureBench with the ONNX export of Version 5b (what the demos run; work PC, 2026-11-24, same
+commands and manifest as above, ONNX Runtime 1.31.1 CPU, `best.onnx` sha256 b4f6583d…):
+
+| MeasureBench, v5b | PyTorch | ONNX |
+| --- | ---: | ---: |
+| one pass: read (of 42 ranged) / mean / median % FS | 38 / 14.24 / 4.82 | 39 / 15.70 / 5.29 |
+| GT range: coverage / mean / median % FS | 15% / 2.80 / 1.90 | 17% / 4.48 / 2.10 |
+| OCR range: coverage / mean / median % FS | 44% / 2.33 / 2.10 | 48% / 8.36 / 2.74 |
+| time per image, GT range / OCR range | 347 / 506 ms | 362 / 518 ms |
+
+The needle position is the same (median difference 0.2% of the scale), but decisions at a
+threshold flip on a few photos, and with about 20 labelled photos read one photo moves the
+mean a lot. GT range: on the 20 photos both read, 2.72 vs 2.97% FS (largest difference 1.5);
+the higher ONNX mean comes from 4 photos it reads and PyTorch does not (3 with a rotation spread
+just above 5% under PyTorch and below under ONNX, errors 4.3–14.3% FS; 1 not detected by
+PyTorch, 17.8%). OCR range: on the 18 photos both read, 2.15 vs 5.25% FS, all of it one photo
+(`pressure_gauge_99`) where OCR reads the scale end as 6 instead of 60 on the slightly
+different crop; the needle fraction is the same (0.538 vs 0.534). One pass: 37 both read, 14.06
+vs 15.50, mostly one photo where ONNX takes the needle tail for the tip (`pressure_gauge_86`,
+1.1 → 87.2% FS). Status (read / RETAKE / no gauge) changes for 15 of 142 photos. So the ONNX
+model reads like the PyTorch model, and the MeasureBench means of either should be read as
+noisy (about 20 photos), as for v3 vs v5b above.
