@@ -1,6 +1,9 @@
-// The gauge reader in the browser: a port of gauge_reader.reader.GaugeReader.read for a known
-// range (no OCR). Canvas image operations + onnxruntime-web; geometry in geometry.js.
+// The gauge reader in the browser: a port of gauge_reader.reader.GaugeReader.read. The range is
+// given (registry or visitor) or read from the dial numbers (ocr.js + scale.js). Canvas image
+// operations + onnxruntime-web; geometry in geometry.js.
 import { decodeTop, fitDial, letterbox, median, clockwiseAngle } from "./geometry.js";
+import { cropImage } from "./ocr.js";
+import { readScale } from "./scale.js";
 
 export const CROP_MARGIN = 0.5;      // real context around a small gauge's box, per side
 export const CROP_PAD = 0.15;        // grey margin around a close-up read whole
@@ -11,6 +14,7 @@ export const MIN_SWEEP_DEG = 90;
 export const CLIP = 0.1;
 export const CONF = 0.1;
 export const IMGSZ = 640;
+export const OCR_CROP = 1.6;         // OCR window, in scale radii around the centre
 const GREY = "rgb(114,114,114)";
 
 function canvas(w, h) {
@@ -142,9 +146,10 @@ export class GaugeReader {
     return d ? toDetection(d) : null;
   }
 
-  // img: a canvas or ImageBitmap of the photo. scale: {min, max, unit} (required: no OCR here).
+  // img: a canvas or ImageBitmap of the photo. scale: {min, max, unit} when known; else the
+  // range is read from the dial numbers with ocr (a DialOcr, ocr.js), or the answer is no_scale.
   // band: {low, high} (either may be null). fast: upright pass only (no RETAKE spread check).
-  async read(img, scale, band = null, fast = false) {
+  async read(img, scale, band = null, fast = false, ocr = null) {
     const ms = {};
     let t = performance.now();
     const [padded, px, py] = padImage(img, CROP_PAD);
@@ -195,6 +200,19 @@ export class GaugeReader {
       out.spread = fracs.length >= 2 ? (Math.max(...fracs) - Math.min(...fracs)) * 100 : 99;
       if (out.spread > RETAKE_SPREAD) { out.status = "retake"; return out; }
     }
+    if (scale) out.scaleSource = "given";
+    else if (ocr) {
+      t = performance.now();
+      const sr = await readDialScale(img, out.keypoints, out.fit, ocr);
+      ms.ocr = performance.now() - t;
+      out.labels = sr.inliers;
+      out.unit = sr.unit;
+      if (sr.scaleMin !== null) {
+        scale = { min: sr.scaleMin, max: sr.scaleMax, unit: sr.unit };
+        out.scaleSource = "ocr";
+      }
+    }
+    if (!scale) { out.status = "no_scale"; return out; }
     out.scaleMin = scale.min; out.scaleMax = scale.max; out.unit = scale.unit;
     out.value = scale.min + out.fraction * (scale.max - scale.min);
     out.alarm = "";
@@ -205,6 +223,25 @@ export class GaugeReader {
     }
     return out;
   }
+}
+
+// The dial around the predicted centre, OCR_CROP scale radii on each side (scale_ocr.dial_crop),
+// read with OCR; the text boxes are placed on the scale (scale.js).
+export async function readDialScale(img, kp, fit, ocr) {
+  const c = document.createElement("canvas");
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+  const full = { w: c.width, h: c.height, data: g.getImageData(0, 0, c.width, c.height).data };
+  const [cx, cy] = kp.center;
+  const r = Math.max(Math.hypot(kp.scale_min[0] - cx, kp.scale_min[1] - cy),
+    Math.hypot(kp.scale_max[0] - cx, kp.scale_max[1] - cy)) * OCR_CROP;
+  let x0 = Math.max(Math.trunc(cx - r), 0), y0 = Math.max(Math.trunc(cy - r), 0);
+  let x1 = Math.min(Math.trunc(cx + r) + 1, full.w), y1 = Math.min(Math.trunc(cy + r) + 1, full.h);
+  if (x1 - x0 < 16 || y1 - y0 < 16) { x0 = 0; y0 = 0; x1 = full.w; y1 = full.h; }
+  const boxes = await ocr.read(cropImage(full, x0, y0, x1, y1));
+  const placed = boxes.map((b) => ({ ...b, poly: b.poly.map(([x, y]) => [x + x0, y + y0]) }));
+  return readScale(placed, kp, fit);
 }
 
 function shiftDet(d, dx, dy) {

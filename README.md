@@ -10,7 +10,8 @@ is not sure. The model never sees a real photo in training: it learns from our o
 gauge generator and is tested on public real photos.
 
 **Try it:** [browser demo](https://huggingface.co/spaces/uhyon/mv2npp-gauge-reader) (runs on
-your CPU, the photo is not uploaded) · **Model:**
+your CPU, the photo is not uploaded; an unregistered gauge's range is read from the dial numbers
+with OCR) · **Model:**
 [uhyon/mv2npp-gauge-pose](https://huggingface.co/uhyon/mv2npp-gauge-pose) (`best.onnx`, `best.pt`) ·
 **Windows app:** [download the zip](https://github.com/uhyon/mv2npp-gauge-reading/releases/latest)
 (unzip and run `mv2npp-gauge-reader.exe`; [details](desktop/README.md))
