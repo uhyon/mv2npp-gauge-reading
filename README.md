@@ -33,8 +33,8 @@ CC BY 2.0 ([credits](demo/examples/ATTRIBUTION.md)).*
 light, motion blur). Bottom: real photos from the Roboflow "Analog Gauge Reading" set (CC BY 4.0,
 [sources](demo/examples/ATTRIBUTION.md)); the tilt and low-light renders sit on CC BY 2.0 background
 photos (same file). Blue: fitted scale arc and scale points; red: needle.
-The dim photo on the right comes back as RETAKE: its three rotated reads differ by 5.7% of the
-scale.*
+The dim photo on the right comes back as RETAKE: its highest and lowest of the three rotated reads
+are 5.7% of the scale apart.*
 
 ## Results
 
@@ -63,7 +63,7 @@ How the model got here (MeterFL, range given, integrated reader where noted):
 | 1 | baseline: 4 keypoints, angles in the image | 2.93 | 68% |
 | 2 | full-circle rotation in training | 10.18 | 33% (dropped) |
 | 3 | 3 extra scale-arc keypoints, needle read on the fitted dial face | 2.83 | 74% |
-| 3 + reader | crop small gauges, three rotated reads, RETAKE above 5% spread | 1.79 (read) | 81% read / 73% all |
+| 3 + reader | crop small gauges, three rotated reads, RETAKE when max − min of the three > 5% of scale | 1.79 (read) | 81% read / 73% all |
 | 4 | yolo11m instead of yolo11s | ≈ v3, 3× slower | (dropped) |
 | **5b + reader** | synthetic data with small gauges and dual-scale dials | **1.36 (read)** | **86% read / 76% all** |
 
@@ -81,7 +81,7 @@ flowchart LR
     C --> D["7 keypoints<br/>centre, tip, 5 scale points"]
     D --> E["fit dial face<br/>(homography)"]
     E --> F["needle fraction<br/>on the face"]
-    F --> G{"3 reads at 0°, ±25°<br/>spread ≤ 5%?"}
+    F --> G{"3 reads at 0°, ±25°<br/>max − min ≤ 5% of scale?"}
     G -->|no| R[RETAKE]
     G -->|yes| H["range and unit:<br/>registry tag, else OCR"]
     H --> I["value, unit,<br/>LOW / NORMAL / HIGH"]
@@ -99,7 +99,8 @@ flowchart LR
    and its centre, so a homography back to a flat, round dial can be fitted. The needle is read
    on that face, where a tilted camera no longer bends the angles.
 4. **Knowing when not to answer.** The crop is read three times (upright and turned ±25°). If
-   the three values differ by more than 5% of the scale, or the scale arc looks implausible,
+   the highest and lowest of the three values are more than 5% of the scale apart (so any two
+   of them differ by more than 5%), or the scale arc looks implausible,
    the answer is RETAKE instead of a guess.
 5. **Range and alarm.** For a known instrument the range, unit and alarm band come from a gauge
    registry ([configs/gauges.csv](configs/gauges.csv), tags made up for the demo), and OCR of the
