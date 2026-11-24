@@ -13,6 +13,12 @@ gauge generator and is tested on public real photos.
 your CPU, the photo is not uploaded) · **Model:**
 [uhyon/mv2npp-gauge-pose](https://huggingface.co/uhyon/mv2npp-gauge-pose) (`best.onnx`, `best.pt`)
 
+![Browser demo: pick an example, read the gauge](docs/img/demo.gif)
+
+*The browser demo (version 5b ONNX model, onnxruntime-web). Each example is read three times
+(upright and turned ±25°); the drawing shows the detection box, the seven keypoints and the
+straightened dial face.*
+
 **Blog series** (Naver blog): 1. [Training without real photos: the synthetic gauge generator](https://blog.naver.com/u_hyon/224488569416) ·
 2. [Read the needle on the dial face (7 keypoints and a homography)](https://blog.naver.com/u_hyon/224488585214) ·
 3. [A reader that asks for another photo (RETAKE, registry, robustness)](https://blog.naver.com/u_hyon/224488587930)
