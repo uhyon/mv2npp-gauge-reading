@@ -116,7 +116,9 @@ class GaugeReader:
                  clip: float = CLIP, crop_margin: float = CROP_MARGIN, crop_pad: float = SMALL_CROP_PAD,
                  whole_share: float = WHOLE_IMAGE_SHARE, square: bool = CROP_SQUARE,
                  check_scale: bool = False, face_fit: bool = True):
-        """``model``: a loaded Ultralytics pose model (else loaded from ``weights``).
+        """``model``: a loaded Ultralytics pose model or ``OnnxPose`` (else loaded from
+        ``weights``: an ``.onnx`` file runs on ONNX Runtime alone when Ultralytics is not
+        installed, as in the desktop app's Windows build).
         ``ocr``: True (rapidocr), False (the range must be given) or an OCR callable.
         ``tta_angle`` None reads upright only (no spread check).
         Framing of a gauge smaller than ``whole_share`` of the photo: the box plus ``crop_margin``
@@ -127,8 +129,14 @@ class GaugeReader:
         ``face_fit`` False reads the needle with image-plane angles, without the frontal
         correction (FR-05 comparison)."""
         if model is None:
-            from ultralytics import YOLO
-            model = YOLO(str(weights))
+            try:
+                from ultralytics import YOLO
+                model = YOLO(str(weights))
+            except ImportError:
+                if Path(weights).suffix != ".onnx":
+                    raise
+                from gauge_reader.keypoints.onnx_pose import OnnxPose
+                model = OnnxPose(weights, imgsz)
         self.model = model
         if ocr is True:
             from gauge_reader.reading.scale_ocr import RapidOcr
@@ -143,6 +151,8 @@ class GaugeReader:
         self.face_fit = face_fit
 
     def _detect(self, img: np.ndarray) -> list[GaugeDetection]:
+        if hasattr(self.model, "detect"):
+            return self.model.detect(img, self.conf)
         res = self.model.predict(img, imgsz=self.imgsz, conf=self.conf, device=self.device,
                                  verbose=False)[0]
         return detections_from_result(res)

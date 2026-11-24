@@ -1,0 +1,78 @@
+# Windows build of the desktop app (desktop/README.md). Runs on pull requests that touch the
+# app, by hand, and on a tag desktop-v*; a tag also attaches the zip to a GitHub release.
+name: desktop-windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["desktop/**", "src/gauge_reader/**", "configs/gauges.csv", "demo/examples/**",
+            ".github/workflows/desktop-windows.yml"]
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: write
+
+env:
+  WEIGHTS_URL: https://huggingface.co/uhyon/mv2npp-gauge-pose/resolve/main/best.onnx
+  WEIGHTS_SHA256: b4f6583ddf25f5b67fb8e006704ed7a0e5eeeadd8c0430db83f21ceef27c945b
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          activate-environment: true
+      - name: Install
+        shell: bash
+        run: |
+          uv pip install -e ".[desktop,ocr]" pyinstaller
+          # headless OpenCV: no GUI backends, a smaller build
+          uv pip uninstall opencv-python
+          uv pip install opencv-python-headless
+      - name: Model (version 5b ONNX)
+        shell: bash
+        run: |
+          mkdir -p weights
+          curl -sSfL "$WEIGHTS_URL" -o weights/best.onnx
+          echo "$WEIGHTS_SHA256  weights/best.onnx" | sha256sum -c -
+      - name: Test
+        shell: bash
+        run: |
+          uv pip install pytest
+          python -m pytest -q tests/test_onnx_pose.py tests/test_reader.py tests/test_desktop.py
+      - name: Build
+        shell: bash
+        run: pyinstaller --noconfirm desktop/mv2npp.spec
+      - name: Self-test of the build
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./dist/mv2npp-gauge-reader/mv2npp-gauge-reader.exe --selftest > selftest.txt 2>&1 || (cat selftest.txt; exit 1)
+          cat selftest.txt
+      - name: Zip
+        shell: pwsh
+        run: |
+          Copy-Item desktop/README_WINDOWS.txt dist/mv2npp-gauge-reader/README.txt
+          Compress-Archive -Path dist/mv2npp-gauge-reader -DestinationPath mv2npp-gauge-reader-windows.zip
+          "{0:N0} MB" -f ((Get-Item mv2npp-gauge-reader-windows.zip).Length / 1MB)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mv2npp-gauge-reader-windows
+          path: mv2npp-gauge-reader-windows.zip
+          retention-days: 14
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mv2npp-gauge-reader-windows.zip
+          body: |
+            Windows desktop app of the analog gauge reader (version 5b model, ONNX Runtime, CPU).
+            Unzip, then run `mv2npp-gauge-reader.exe`. The build is not code-signed, so Windows
+            SmartScreen may warn on first start: choose "More info" → "Run anyway".
+            Example photos: own synthetic renders (two on CC BY 2.0 background photos) and
+            Roboflow Universe photos (CC BY 4.0); credits in demo/examples/ATTRIBUTION.md.
