@@ -178,6 +178,27 @@ Howells et al. (CVPRW 2021), León-Alcázar et al. (WACV 2024), Reitsma et al. (
 MeasureBench (Lin et al., CVPR 2026) and KAERI's gauge-reading work for nuclear facilities
 (KNS 2025, ICCAS 2025). Details in [docs/RELATED_WORK.md](docs/RELATED_WORK.md).
 
+### Numbers reported in prior papers (not a direct comparison)
+
+The rows below are copied from each paper. They use **different test photos, and some use a
+different metric**, so they only show the scale of errors in this field; they do not rank the
+methods. We did not re-run any of these methods on our evaluation sets.
+
+| Work | Test data (as reported) | Range of the scale | Reported error |
+| --- | --- | --- | --- |
+| Reitsma et al., ICRA 2024 | web photos, frontal / angled, photos where scale OCR succeeded | read by OCR | 1.15% / 0.77% FS (relative reading error = % of scale range) |
+| Reitsma et al., ICRA 2024 | Howells et al. dataset, 5 gauges (meter_d left out) | read by OCR | 2.01% FS mean; 2 gauges fail often (OCR) |
+| Howells et al., CVPRW 2021 (as reported by Reitsma et al.) | same Howells dataset | see paper | 3.3% FS mean |
+| León-Alcázar et al., WACV 2024 | 4,813 curated real photos | – | needle angle error in degrees, 4.55° lower than the previous best (not % FS) |
+| **This project, Version 5b + reader** | MeterFL, 262 pressure-gauge photos | given (label) | **1.36% FS** mean on read photos (88% read) |
+| This project, Version 3 + reader | MeterFL, 262 photos | read by OCR | 1.88% FS mean on read photos (83% read) |
+
+Reitsma et al. read the range with OCR and report the error only on photos where OCR worked;
+counting OCR misreads their mean on the same web photos is several hundred % FS. Our 1.36% uses
+the range from the label (in use: from the gauge registry). A fair comparison would run the
+methods on the same photos; that is left for later work (see Q-08 in
+[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)).
+
 ## License
 
 Code: MIT. Datasets keep their own licenses (docs/DATASETS.md); demo photos
