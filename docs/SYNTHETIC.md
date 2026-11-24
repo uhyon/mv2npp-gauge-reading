@@ -66,8 +66,9 @@ pump rooms and turbine halls from [Openverse](https://openverse.org) into `asset
 with a credit line per photo in `assets/backgrounds/ATTRIBUTION.csv`. Photos are not committed;
 the CSV is: `download_backgrounds.py --from-csv` fetches exactly the listed photos under the same
 names, which reproduces the reviewed set (and the generated images), and it doubles as
-the credit list. README and demo images use only CC0, public-domain or procedural backgrounds,
-so they need no per-image credit.
+the credit list. Most README and demo images have procedural backgrounds; two demo renders
+(`PI-301__synth_tilt.jpg`, `PI-301__synth_lowlight.jpg`) use CC BY 2.0 photos and are credited in
+`demo/examples/ATTRIBUTION.md` (found on 2026-11-24 by replaying their seeds).
 
 ```bash
 uv run python scripts/download_backgrounds.py            # about 300 photos, 15 per search term

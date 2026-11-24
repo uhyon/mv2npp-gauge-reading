@@ -50,8 +50,8 @@ full Python version also reads the dial numbers with OCR. Built as a machine-vis
 nuclear power plant rounds; it has **not** been evaluated on real plant photos.
 
 Code, results and limitations: https://github.com/uhyon/mv2npp-gauge-reading (MIT).
-Example images: own synthetic renders and CC BY 4.0 Roboflow Universe photos
-(`examples/ATTRIBUTION.md`).
+Example images: own synthetic renders (two on CC BY 2.0 background photos) and CC BY 4.0
+Roboflow Universe photos (credits in `examples/ATTRIBUTION.md`).
 """
 
 

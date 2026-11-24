@@ -1,6 +1,7 @@
 # Demo example images: sources
 
-Only our own synthetic renders and CC BY 4.0 Roboflow photos are used here (DR-06,
+Only our own synthetic renders (two on CC BY 2.0 background photos, credited below) and CC BY 4.0
+Roboflow photos are used here (DR-06,
 docs/DATASETS.md). No MeterFL, MeasureBench or Cambridge images.
 
 ## Own synthetic renders (MIT, this repository)
@@ -16,6 +17,21 @@ uses; the tags are made up for the demo.
 | PI-301__synth_tilt.jpg | 018988 | 0–10 bar | 50° | none | 6.162 bar |
 | PI-301__synth_lowlight.jpg | 018307 | 0–10 bar | 29° | low_light | 3.578 bar |
 | PI-301__synth_blur.jpg | 018472 | 0–10 bar | 34° | motion_blur | 6.359 bar |
+
+### Background photos in two renders (CC BY 2.0)
+
+`PI-101__synth_clean.jpg` and `PI-301__synth_blur.jpg` have procedural backgrounds. Two renders
+use a background photo from Openverse (checked on 2026-11-24 by replaying their seeds,
+`assets/backgrounds/ATTRIBUTION.csv`):
+
+| file | background photo | creator | license |
+| --- | --- | --- | --- |
+| PI-301__synth_tilt.jpg | ["Newberry Geothermal Lease Project"](https://www.flickr.com/photos/50169152@N06/14493274705) | BLM Oregon & Washington | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
+| PI-301__synth_lowlight.jpg | ["Broseley Pipeworks - Clay Tobacco Pipe Museum - sign"](https://www.flickr.com/photos/39415781@N06/3809582538) | ell brown | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) |
+
+Changes: the photo is cropped and resized to 640 x 640 px, a synthetic gauge is drawn over it,
+and the render adds tilt (tilt image) or low light and noise (low-light image).
+These two photos and their changes are not covered by this repository's MIT license.
 
 ## Roboflow photos (CC BY 4.0)
 

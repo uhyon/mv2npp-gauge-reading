@@ -17,7 +17,8 @@ your CPU, the photo is not uploaded) · **Model:**
 
 *The browser demo (version 5b ONNX model, onnxruntime-web). Each example is read three times
 (upright and turned ±25°); the drawing shows the detection box, the seven keypoints and the
-straightened dial face.*
+straightened dial face. Roboflow photos CC BY 4.0; background photos of two synthetic renders
+CC BY 2.0 ([credits](demo/examples/ATTRIBUTION.md)).*
 
 **Blog series** (Naver blog): 1. [Training without real photos: the synthetic gauge generator](https://blog.naver.com/u_hyon/224488569416) ·
 2. [Read the needle on the dial face (7 keypoints and a homography)](https://blog.naver.com/u_hyon/224488585214) ·
@@ -27,7 +28,8 @@ straightened dial face.*
 
 *Version 5b, range from the gauge registry. Top: our synthetic renders (clean, 50° tilt, low
 light, motion blur). Bottom: real photos from the Roboflow "Analog Gauge Reading" set (CC BY 4.0,
-[sources](demo/examples/ATTRIBUTION.md)). Blue: fitted scale arc and scale points; red: needle.
+[sources](demo/examples/ATTRIBUTION.md)); the tilt and low-light renders sit on CC BY 2.0 background
+photos (same file). Blue: fitted scale arc and scale points; red: needle.
 The dim photo on the right comes back as RETAKE: its three rotated reads differ by 5.7% of the
 scale.*
 
@@ -208,4 +210,5 @@ methods on the same photos; that is left for later work (see Q-08 in
 ## License
 
 Code: MIT. Datasets keep their own licenses (docs/DATASETS.md); demo photos
-from Roboflow are CC BY 4.0 ([attribution](demo/examples/ATTRIBUTION.md)).
+from Roboflow are CC BY 4.0, and two synthetic demo renders use CC BY 2.0 background photos
+([attribution](demo/examples/ATTRIBUTION.md)).
