@@ -1,63 +1,66 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Analog Gauge Reader</title>
+<title>mv2npp Gauge Reader</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.wasm.min.js"></script>
 <script type="module" src="app.js"></script>
 </head>
 <body>
-<header>
-  <h1>Analog Gauge Reader</h1>
-  <p>Reads a dial gauge from a photo: a YOLO11s-pose model finds the gauge and seven keypoints
-  (centre, needle tip, scale ends and three points on the scale arc), the scale arc is fitted
-  as a circle seen in perspective, and the needle is read on the straightened dial face.
-  Everything runs in your browser; photos are not uploaded.</p>
+<header class="toolbar">
+  <div class="brand">⚛ <span data-i18n="title">mv2npp 계기 순시 점검</span></div>
+  <div class="tools">
+    <label class="btn"><input type="file" id="file" accept="image/*" multiple hidden><span data-i18n="open">📷 사진 열기</span></label>
+    <button class="btn" id="examples" data-i18n="examples">🖼 예시 사진</button>
+    <button class="btn primary" id="readall" data-i18n="readall">▶ 전체 다시 판독</button>
+    <button class="btn" id="csv" data-i18n="csv">💾 보고서 저장 (CSV)</button>
+    <button class="btn" id="about" data-i18n="about">ⓘ 정보</button>
+    <button class="btn" id="lang">EN</button>
+  </div>
 </header>
-<main>
-  <section class="panel controls">
-    <label class="drop" id="drop">
-      <input type="file" id="file" accept="image/*">
-      <span>Drop a photo here or <u>choose a file</u></span>
-    </label>
-    <div class="field">
-      <span class="label">Examples</span>
-      <div id="examples" class="examples"></div>
+<main class="layout" id="drop">
+  <aside class="list" id="list"><p class="empty" data-i18n="listEmpty">사진을 열거나 여기로 끌어다 놓으세요. 예시 사진도 있습니다.</p></aside>
+  <section class="center">
+    <nav class="tabs" role="tablist">
+      <button role="tab" class="tab active" data-view="drawn" data-i18n="tabDrawn">검출 · 키포인트</button>
+      <button role="tab" class="tab" data-view="frontal" data-i18n="tabFront">정면 보정</button>
+      <button role="tab" class="tab" data-view="photo" data-i18n="tabPhoto">원본</button>
+    </nav>
+    <div class="view">
+      <canvas id="drawn"></canvas>
+      <canvas id="frontal" width="420" height="420" hidden></canvas>
+      <canvas id="photo" hidden></canvas>
+      <p id="viewhint" class="empty" data-i18n="viewEmpty">왼쪽에서 사진을 고르세요.</p>
     </div>
-    <div class="field">
-      <label class="label" for="tag">Gauge</label>
-      <select id="tag"></select>
-      <div id="custom" class="custom" hidden>
-        <input id="cmin" type="number" step="any" value="0" aria-label="Scale min">
-        <span>to</span>
-        <input id="cmax" type="number" step="any" value="10" aria-label="Scale max">
-        <input id="cunit" type="text" value="bar" aria-label="Unit">
-      </div>
-      <p id="taginfo" class="hint"></p>
-    </div>
-    <label class="check"><input type="checkbox" id="fast"> Fast mode (one pass, no RETAKE check)</label>
-    <button id="read" disabled>Read gauge</button>
-    <p id="status" class="hint" role="status">Loading the model…</p>
   </section>
-  <section class="panel results">
-    <div class="views">
-      <figure><canvas id="drawn" width="640" height="480"></canvas><figcaption>Detection and keypoints</figcaption></figure>
-      <figure><canvas id="frontal" width="320" height="320"></canvas><figcaption>Dial face, straightened</figcaption></figure>
+  <aside class="side">
+    <div class="card meter" id="meter"></div>
+    <label class="key" for="tag" data-i18n="tag">계기 태그</label>
+    <select id="tag"></select>
+    <div id="custom" class="custom" hidden>
+      <input id="cmin" type="number" step="any" value="0" aria-label="min">
+      <span>–</span>
+      <input id="cmax" type="number" step="any" value="10" aria-label="max">
+      <input id="cunit" type="text" value="bar" aria-label="unit">
+      <button class="btn" id="capply" data-i18n="apply">적용</button>
     </div>
-    <div id="summary" class="summary"><p class="hint">Pick an example or add a photo.</p></div>
+    <label class="check"><input type="checkbox" id="fast"> <span data-i18n="fast">빠른 모드 (회전 검증 없이 1회 판독)</span></label>
+    <div class="grid" id="kv"></div>
+  </aside>
+  <section class="tablewrap">
+    <table id="table"><thead></thead><tbody></tbody></table>
   </section>
 </main>
-<footer>
-  <p><b>Limits.</b> The browser version takes the scale range from the gauge registry (the tags are
-  made-up examples) or from your input; the full version also reads the dial numbers with OCR.
-  A reading is a demonstration, not a safety measurement. When the three readings (upright and
-  turned ±25°) disagree by more than 5% of scale, the answer is RETAKE.</p>
-  <p>Model: <a href="https://huggingface.co/uhyon/mv2npp-gauge-pose">uhyon/mv2npp-gauge-pose</a> ·
-  Code: <a href="https://github.com/uhyon/mv2npp-gauge-reading">uhyon/mv2npp-gauge-reading</a> ·
-  Example photos: own synthetic renders (two on CC BY 2.0 background photos) and CC BY 4.0
-  Roboflow images (<a href="examples/ATTRIBUTION.md">credits</a>).</p>
+<footer class="status">
+  <span id="model" data-i18n="modelLoading">모델 불러오는 중…</span>
+  <span id="summary"></span>
+  <span class="right" data-i18n="limits">합성 데이터로만 학습 · 실제 원전 사진 미검증 · 사진은 업로드되지 않음</span>
 </footer>
+<dialog id="dlg">
+  <div id="dlgbody"></div>
+  <form method="dialog"><button class="btn primary">OK</button></form>
+</dialog>
 </body>
 </html>

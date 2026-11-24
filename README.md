@@ -11,7 +11,9 @@ gauge generator and is tested on public real photos.
 
 **Try it:** [browser demo](https://huggingface.co/spaces/uhyon/mv2npp-gauge-reader) (runs on
 your CPU, the photo is not uploaded) · **Model:**
-[uhyon/mv2npp-gauge-pose](https://huggingface.co/uhyon/mv2npp-gauge-pose) (`best.onnx`, `best.pt`)
+[uhyon/mv2npp-gauge-pose](https://huggingface.co/uhyon/mv2npp-gauge-pose) (`best.onnx`, `best.pt`) ·
+**Windows app:** [download the zip](https://github.com/uhyon/mv2npp-gauge-reading/releases/latest)
+(unzip and run `mv2npp-gauge-reader.exe`; [details](desktop/README.md))
 
 ![Browser demo: pick an example, read the gauge](docs/img/demo.gif)
 
@@ -152,6 +154,10 @@ uv run python scripts/read_gauge.py --weights weights/best.onnx photo.jpg
 
 # local Gradio demo (pip install -e ".[demo]")
 GAUGE_WEIGHTS=weights/best.onnx uv run python demo/app.py
+
+# desktop app for a round of photos (PySide6, ONNX Runtime only)
+uv pip install -e ".[desktop,ocr]"
+uv run python desktop/app.py
 ```
 
 `read_gauge.py` prints one JSON line per photo: value, unit, status, alarm, the rotation spread
@@ -163,12 +169,13 @@ and the time per stage. Generating data, training on Kaggle and the evaluation s
 ```
 configs/            generator configs, gauge registry (gauges.csv)
 demo/               Gradio app (app.py), browser demo (web/), example photos
+desktop/            desktop app (PySide6) and its Windows build
 docs/               proposal, requirements, datasets, results, training notes
 notebooks/          Kaggle training notebook
 scripts/            data download, generation, training, reading, evaluation
 src/gauge_reader/
   synth/            synthetic gauge generator (dial, 3D case, scene, degradations)
-  keypoints/        YOLO pose wrapper
+  keypoints/        YOLO pose wrapper, ONNX Runtime pose model (no PyTorch)
   reading/          geometry (value, alarm), dial-face fit, scale OCR
   eval/             dataset loaders, metrics, degradations for robustness tests
   reader.py         GaugeReader: the whole pipeline on one photo

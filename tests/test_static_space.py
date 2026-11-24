@@ -13,7 +13,8 @@ def test_static_space_build(tmp_path):
     spec.loader.exec_module(mss)
     out = tmp_path / "space"
     mss.main(["--out", str(out)])
-    for name in ("index.html", "app.js", "reader.js", "geometry.js", "style.css", "gauges.csv",
+    for name in ("index.html", "app.js", "reader.js", "geometry.js", "meter.js", "style.css",
+                 "gauges.csv",
                  "README.md", "examples/ATTRIBUTION.md"):
         assert (out / name).is_file(), name
     assert "sdk: static" in (out / "README.md").read_text()
