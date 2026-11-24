@@ -3,12 +3,14 @@
 import { GaugeReader } from "./reader.js";
 import { frontalMatrix, inv3, project } from "./geometry.js";
 import { meterSvg, statusOf, STATUS_COLORS } from "./meter.js";
+import { DialOcr } from "./ocr.js";
 
 const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
 const PARAMS = new URLSearchParams(location.search);
 const MODEL_URL = PARAMS.get("model")
   || "https://huggingface.co/uhyon/mv2npp-gauge-pose/resolve/main/best.onnx";
-const CUSTOM = "__custom__";
+const CUSTOM = "__custom__", AUTO = "__ocr__";
+const OCR_BASE = PARAMS.get("ocr") || "ocr";
 const $ = (id) => document.getElementById(id);
 
 const T = {
@@ -21,21 +23,24 @@ const T = {
     modelLoading: "모델 불러오는 중…", modelReady: "모델 v5b (ONNX, 브라우저 CPU)",
     modelFail: "모델을 불러오지 못했습니다: ",
     limits: "합성 데이터로만 학습 · 실제 원전 사진 미검증 · 사진은 업로드되지 않음",
-    custom: "미등록 계기: 눈금 범위 직접 입력",
-    cols: ["사진", "태그", "판독값", "단위", "눈금", "상태", "회전 차이 %", "시간 ms"],
-    keys: ["상태", "눈금 범위", "경보 범위", "바늘 위치", "회전 판독 차이", "문자판 맞춤", "검출 신뢰도", "처리 시간"],
+    custom: "미등록 계기: 범위 직접 입력", auto: "미등록 계기: OCR로 범위 자동 판독",
+    ocrLoading: "OCR 모델 불러오는 중… (처음 한 번, 약 16 MB)", ocrFail: "OCR 모델을 불러오지 못했습니다: ",
+    src: { given: "등록부", ocr: "OCR (문자판 숫자)", custom: "직접 입력" },
+    cols: ["사진", "태그", "판독값", "단위", "눈금", "범위 출처", "상태", "회전 차이 %", "시간 ms"],
+    keys: ["상태", "눈금 범위", "범위 출처", "경보 범위", "바늘 위치", "회전 판독 차이", "문자판 맞춤", "처리 시간"],
     read: "판독", pending: "판독 중…", waiting: "대기", needScale: "범위 필요",
-    needScaleHint: "이 사진은 등록된 태그가 없습니다. 오른쪽에서 태그를 고르거나 눈금 범위를 입력하세요.",
+    needScaleHint: "눈금 범위를 입력하고 적용을 누르세요.",
     st: { ok: "판독", retake: "재촬영: 회전 판독 차이 5% 초과", bad_geometry: "재촬영: 눈금 키포인트 불량",
-      no_gauge: "재촬영: 계기 없음" },
+      no_gauge: "재촬영: 계기 없음", no_scale: "눈금 숫자를 못 읽음: 오른쪽에서 범위를 직접 입력하세요" },
     summary: (n, ok, al, rt) => `점검 ${n}건 · 판독 ${ok} · 경보 ${al} · 재촬영 ${rt}`,
     fastNo: "확인 안 함 (빠른 모드)",
     aboutHtml: `<h3>mv2npp · 아날로그 계기 자동 판독</h3>
 <p>원전 현장 순시용 머신비전 연구. 합성 렌더로만 학습한 YOLO11s-pose 모델(v5b)이 계기와 7개 키포인트를 찾고,
 문자판을 정면으로 보정해 바늘을 읽습니다. 세 번(정자세, ±25° 회전) 읽어 5% 넘게 다르면 재촬영(RETAKE)을 요청합니다.
 모든 계산은 브라우저에서 하며 사진은 업로드되지 않습니다.</p>
-<p>이 웹 버전은 OCR이 없어서 눈금 범위를 예시 계기 등록부(가상의 태그)나 직접 입력으로 받습니다.
-Python 버전과 Windows 데스크톱 앱은 문자판 숫자도 OCR로 읽습니다. 실제 원전 사진으로는 검증하지 않았습니다.</p>
+<p>등록된 계기(예시 등록부, 가상의 태그)는 등록부의 범위·단위·경보 범위를 쓰고, 미등록 계기는 문자판 숫자를
+OCR(PP-OCRv4, RapidOCR의 ONNX 모델)로 읽어 첫 눈금과 끝 눈금을 정합니다. 숫자를 못 읽으면 범위를 직접 입력할 수 있습니다.
+실제 원전 사진으로는 검증하지 않았습니다.</p>
 <p>코드·결과: <a href="https://github.com/uhyon/mv2npp-gauge-reading" target="_blank">github.com/uhyon/mv2npp-gauge-reading</a> (MIT) ·
 모델: <a href="https://huggingface.co/uhyon/mv2npp-gauge-pose" target="_blank">uhyon/mv2npp-gauge-pose</a><br>
 예시 사진: 자체 합성 렌더(두 장은 CC BY 2.0 배경 사진 위), Roboflow Universe 사진(CC BY 4.0) ·
@@ -50,13 +55,16 @@ Python 버전과 Windows 데스크톱 앱은 문자판 숫자도 OCR로 읽습�
     modelLoading: "Loading the model…", modelReady: "Model v5b (ONNX, browser CPU)",
     modelFail: "Could not load the model: ",
     limits: "Trained on synthetic data only · not validated on real plant photos · photos are not uploaded",
-    custom: "Unregistered gauge: enter the scale range",
-    cols: ["Photo", "Tag", "Value", "Unit", "Scale", "Status", "Spread %", "Time ms"],
-    keys: ["Status", "Scale range", "Alarm band", "Needle position", "Spread of 3 reads", "Dial fit", "Detection conf.", "Time"],
+    custom: "Unregistered gauge: enter the range", auto: "Unregistered gauge: read the range with OCR",
+    ocrLoading: "Loading the OCR models… (once, about 16 MB)", ocrFail: "Could not load the OCR models: ",
+    src: { given: "registry", ocr: "OCR (dial numbers)", custom: "entered" },
+    cols: ["Photo", "Tag", "Value", "Unit", "Scale", "Range from", "Status", "Spread %", "Time ms"],
+    keys: ["Status", "Scale range", "Range from", "Alarm band", "Needle position", "Spread of 3 reads", "Dial fit", "Time"],
     read: "read", pending: "reading…", waiting: "waiting", needScale: "range needed",
-    needScaleHint: "This photo has no registered tag. Pick a tag or enter the scale range on the right.",
+    needScaleHint: "Enter the scale range and press Apply.",
     st: { ok: "read", retake: "RETAKE: the three reads differ by more than 5%",
-      bad_geometry: "RETAKE: scale keypoints unusable", no_gauge: "RETAKE: no gauge found" },
+      bad_geometry: "RETAKE: scale keypoints unusable", no_gauge: "RETAKE: no gauge found",
+      no_scale: "Dial numbers not read: enter the range on the right" },
     summary: (n, ok, al, rt) => `${n} photos · ${ok} read · ${al} alarms · ${rt} retakes`,
     fastNo: "not checked (fast mode)",
     aboutHtml: `<h3>mv2npp · analog gauge reader</h3>
@@ -64,8 +72,9 @@ Python 버전과 Windows 데스크톱 앱은 문자판 숫자도 OCR로 읽습�
 synthetic renders finds the gauge and seven keypoints, the dial is straightened, and the needle is read on its
 face. Each photo is read three times (upright and turned ±25°); if the reads differ by more than 5% of the
 scale the answer is RETAKE. Everything runs in your browser; photos are not uploaded.</p>
-<p>This web version has no OCR: the scale range comes from an example registry (made-up tags) or your input.
-The Python version and the Windows desktop app also read the dial numbers with OCR. Not validated on real plant photos.</p>
+<p>A registered gauge (example registry, made-up tags) takes its range, unit and alarm band from the registry; an
+unregistered gauge has its dial numbers read with OCR (PP-OCRv4, the ONNX models of RapidOCR) to find the first and
+last scale values. When no numbers are read, the range can be entered by hand. Not validated on real plant photos.</p>
 <p>Code and results: <a href="https://github.com/uhyon/mv2npp-gauge-reading" target="_blank">github.com/uhyon/mv2npp-gauge-reading</a> (MIT) ·
 model: <a href="https://huggingface.co/uhyon/mv2npp-gauge-pose" target="_blank">uhyon/mv2npp-gauge-pose</a><br>
 Example photos: own synthetic renders (two on CC BY 2.0 background photos) and Roboflow Universe photos
@@ -75,7 +84,7 @@ Example photos: own synthetic renders (two on CC BY 2.0 background photos) and R
 let lang = PARAMS.get("lang") === "en" ? "en" : "ko";
 const t = () => T[lang];
 
-let reader = null, registry = {}, exampleList = [];
+let reader = null, registry = {}, exampleList = [], ocr = null, ocrLoading = null;
 const items = [];
 let current = -1, view = "drawn", busy = false;
 
@@ -102,23 +111,43 @@ function fmtValue(v, span) {
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// [scale or null (read it with OCR), band, ready]: ready is false for a hand-entered range
+// that is not entered yet
 function scaleOf(it) {
   const g = registry[it.tag];
-  if (g) return [{ min: g.min, max: g.max, unit: g.unit }, g.low != null || g.high != null ? { low: g.low, high: g.high } : null];
-  return [it.custom || null, null];
+  if (g) return [{ min: g.min, max: g.max, unit: g.unit }, g.low != null || g.high != null ? { low: g.low, high: g.high } : null, true];
+  if (it.mode === "custom") return [it.custom || null, null, !!it.custom];
+  return [null, null, true];
+}
+
+function ensureOcr() {
+  if (!ocrLoading) {
+    $("model").textContent = t().ocrLoading;
+    ocrLoading = DialOcr.load(window.ort, OCR_BASE).then((o) => {
+      ocr = o; window.dialOcr = o;
+      $("model").textContent = t().modelReady + " · OCR";
+      return o;
+    }).catch((e) => {
+      console.error(e);
+      $("model").textContent = t().ocrFail + e.message;
+      ocrLoading = null;
+      return null;
+    });
+  }
+  return ocrLoading;
 }
 
 function stateOf(it) {
   if (it.error) return "ERROR";
   if (it.reading) return statusOf(it.reading) || t().read;
-  if (!scaleOf(it)[0]) return t().needScale;
+  if (!scaleOf(it)[2]) return t().needScale;
   return it.queued ? t().pending : t().waiting;
 }
 
 // ---- adding photos
 async function addBlob(blob, name, tag = null) {
   const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
-  items.push({ name, tag: registry[tag] ? tag : null, bitmap, thumb: URL.createObjectURL(blob),
+  items.push({ name, tag: registry[tag] ? tag : null, mode: "ocr", bitmap, thumb: URL.createObjectURL(blob),
     reading: null, custom: null, queued: false, error: "" });
   return items.length - 1;
 }
@@ -144,7 +173,7 @@ async function addExamples() {
 
 function afterAdd(first) {
   if (items.length === first) return;
-  for (let i = first; i < items.length; i++) items[i].queued = !!scaleOf(items[i])[0];
+  for (let i = first; i < items.length; i++) items[i].queued = scaleOf(items[i])[2];
   renderList(); renderTable();
   if (current < 0) select(first);
   pump();
@@ -160,7 +189,9 @@ async function pump() {
   const [scale, band] = scaleOf(it);
   try {
     await new Promise((r) => setTimeout(r, 10));
-    it.reading = await reader.read(it.bitmap, scale, band, $("fast").checked);
+    const o = scale ? null : await ensureOcr();
+    it.reading = await reader.read(it.bitmap, scale, band, $("fast").checked, o);
+    if (it.reading.scaleSource === "given" && it.mode === "custom" && !registry[it.tag]) it.reading.scaleSource = "custom";
     it.reading.fast = $("fast").checked;
     it.error = "";
   } catch (e) {
@@ -177,7 +208,7 @@ async function pump() {
 function requeue(i) {
   const it = items[i];
   it.reading = null; it.error = "";
-  it.queued = !!scaleOf(it)[0];
+  it.queued = scaleOf(it)[2];
   renderList(); renderTable();
   if (i === current) showCurrent();
   pump();
@@ -209,10 +240,11 @@ function renderTable() {
   $("table").tBodies[0].innerHTML = items.map((it, i) => {
     const r = it.reading, st = stateOf(it);
     const cells = [it.name, it.tag || "–", r && r.value != null ? fmtValue(r.value, r.scaleMax - r.scaleMin) : "–",
-      r && r.unit ? r.unit : "–", r && r.scaleMin != null ? `${fmt(r.scaleMin)}–${fmt(r.scaleMax)}` : "–", st,
+      r && r.unit ? r.unit : "–", r && r.scaleMin != null ? `${fmt(r.scaleMin)}–${fmt(r.scaleMax)}` : "–",
+      r && r.scaleSource ? t().src[r.scaleSource] : "–", st,
       r && r.spread != null ? r.spread.toFixed(1) : "–",
       r ? Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0)) : "–"];
-    return `<tr data-i="${i}">${cells.map((c, j) => `<td class="${j === 5 ? esc(st) : ""}">${esc(c)}</td>`).join("")}</tr>`;
+    return `<tr data-i="${i}">${cells.map((c, j) => `<td class="${j === 6 ? esc(st) : ""}">${esc(c)}</td>`).join("")}</tr>`;
   }).join("");
   $("table").querySelectorAll("tbody tr").forEach((el) => el.addEventListener("click", () => select(+el.dataset.i)));
   const sts = items.map((it) => (it.reading ? statusOf(it.reading) : null));
@@ -229,8 +261,8 @@ function select(i) {
 }
 
 function setTagSelect(it) {
-  $("tag").value = it.tag || CUSTOM;
-  $("custom").hidden = !!it.tag;
+  $("tag").value = it.tag || (it.mode === "custom" ? CUSTOM : AUTO);
+  $("custom").hidden = $("tag").value !== CUSTOM;
   if (!it.tag && it.custom) {
     $("cmin").value = it.custom.min; $("cmax").value = it.custom.max; $("cunit").value = it.custom.unit;
   }
@@ -251,15 +283,18 @@ function showCurrent() {
   const band = g && (g.low != null || g.high != null) ? { low: g.low, high: g.high } : null;
   $("meter").innerHTML = meterSvg(r, band, r && r.value != null ? fmtValue(r.value, r.scaleMax - r.scaleMin) : "");
   const k = t().keys;
-  const rows = !r ? [[k[0], it.error || (scaleOf(it)[0] ? t().pending : t().needScaleHint)]] : [
+  const src = r && r.scaleSource ? t().src[r.scaleSource]
+    + (r.scaleSource === "ocr" && r.labels ? ` · ${r.labels.map((l) => l.text).join(", ")}` : "") : "–";
+  const rows = !r ? [[k[0], it.error || (scaleOf(it)[2] ? t().pending : t().needScaleHint)]] : [
     [k[0], r.value != null ? (statusOf(r) || t().read) : (t().st[r.status] || r.status), STATUS_COLORS[statusOf(r)]],
     [k[1], r.scaleMin != null ? `${fmt(r.scaleMin)}–${fmt(r.scaleMax)} ${r.unit}` : "–"],
-    [k[2], band ? `${band.low != null ? fmt(band.low) : ""}–${band.high != null ? fmt(band.high) : ""} ${g.unit}` : "–"],
-    [k[3], r.fraction != null ? `${(r.fraction * 100).toFixed(1)}%` : "–"],
-    [k[4], r.fast ? t().fastNo : r.spread != null ? `${r.spread.toFixed(1)}% FS` : "–"],
-    [k[5], r.fit ? `${r.fit.sweep.toFixed(0)}°, rms ${(r.fit.rms * 100).toFixed(1)}%` : "–"],
-    [k[6], r.boxConf != null ? r.boxConf.toFixed(2) : "–"],
-    [k[7], `${Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0))} ms`],
+    [k[2], src],
+    [k[3], band ? `${band.low != null ? fmt(band.low) : ""}–${band.high != null ? fmt(band.high) : ""} ${g.unit}` : "–"],
+    [k[4], r.fraction != null ? `${(r.fraction * 100).toFixed(1)}%` : "–"],
+    [k[5], r.fast ? t().fastNo : r.spread != null ? `${r.spread.toFixed(1)}% FS` : "–"],
+    [k[6], r.fit ? `${r.fit.sweep.toFixed(0)}°, rms ${(r.fit.rms * 100).toFixed(1)}%` : "–"],
+    [k[7], `${Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0))} ms`
+      + (r.ms.ocr ? ` (OCR ${Math.round(r.ms.ocr)})` : "")],
   ];
   $("kv").innerHTML = rows.map(([a, b, c]) => `<div class="card"${rows.length === 1 ? ' style="grid-column:1/-1"' : ""}><b>${a}</b><span${c ? ` style="color:${c}"` : ""}>${esc(b)}</span></div>`).join("");
 }
@@ -319,6 +354,14 @@ function drawReading(c, bm, r) {
       g.strokeStyle = "#000"; g.beginPath(); g.arc(...k[name], rad + 1, 0, 2 * Math.PI); g.stroke();
     }
   }
+  if (r.labels && r.labels.length) {       // the dial numbers the range was read from
+    g.strokeStyle = "#facc15"; g.lineWidth = lw;
+    for (const l of r.labels) {
+      g.beginPath();
+      l.poly.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath(); g.stroke();
+    }
+  }
   const text = r.value != null ? `${fmtValue(r.value, r.scaleMax - r.scaleMin)} ${r.unit}${r.alarm ? "  " + r.alarm : ""}`.trim()
     : `RETAKE (${r.status})`;
   const fs = Math.round(16 * s);
@@ -364,13 +407,13 @@ function drawFrontal(c, bm, r) {
 // ---- report, language, inputs
 function saveCsv() {
   if (!items.length) return;
-  const head = ["photo", "tag", "status", "alarm", "value", "unit", "scale_min", "scale_max",
+  const head = ["photo", "tag", "status", "alarm", "value", "unit", "scale_min", "scale_max", "scale_source",
     "needle_fraction", "spread_pct", "ms"];
   const q = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   const rows = items.map((it) => {
     const r = it.reading || {};
     return [it.name, it.tag || "", r.status || it.error || "", r.alarm || "",
-      r.value != null ? Number(r.value.toPrecision(6)) : "", r.unit || "", r.scaleMin, r.scaleMax,
+      r.value != null ? Number(r.value.toPrecision(6)) : "", r.unit || "", r.scaleMin, r.scaleMax, r.scaleSource || "",
       r.fraction != null ? r.fraction.toFixed(4) : "", r.spread != null ? r.spread.toFixed(2) : "",
       r.ms ? Math.round(Object.values(r.ms).reduce((a, b) => a + b, 0)) : ""].map(q).join(",");
   });
@@ -391,6 +434,7 @@ function applyLang() {
   const sel = $("tag"), keep = sel.value;
   sel.innerHTML = "";
   for (const g of Object.values(registry)) sel.append(new Option(`${g.tag}: ${fmt(g.min)}–${fmt(g.max)} ${g.unit}`, g.tag));
+  sel.append(new Option(t().auto, AUTO));
   sel.append(new Option(t().custom, CUSTOM));
   if (keep) sel.value = keep;
   renderList(); renderTable(); showCurrent();
@@ -409,14 +453,15 @@ function setupInputs() {
     const v = $("tag").value;
     $("custom").hidden = v !== CUSTOM;
     if (!it) return;
-    it.tag = v === CUSTOM ? null : v;
+    it.tag = v === CUSTOM || v === AUTO ? null : v;
+    it.mode = v === CUSTOM ? "custom" : "ocr";
     requeue(current);
   });
   $("capply").addEventListener("click", () => {
     const it = items[current];
     const min = Number($("cmin").value), max = Number($("cmax").value);
     if (!it || !Number.isFinite(min) || !Number.isFinite(max) || min === max) return;
-    it.tag = null;
+    it.tag = null; it.mode = "custom";
     it.custom = { min, max, unit: $("cunit").value.trim() };
     requeue(current);
   });

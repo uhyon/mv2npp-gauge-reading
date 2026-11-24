@@ -581,6 +581,18 @@ examples with the registry range (headless Chromium in the cloud container vs.
 0.02%); the difference comes from image resampling (canvas vs. OpenCV). Time per photo in that
 container: about 1 s detection + 2–3.5 s for the three keypoint passes.
 
+**OCR in the browser (2026-11-24).** The static Space now reads the range of an unregistered
+gauge too: `demo/web/ocr.js` runs the PP-OCRv4 detection and recognition models that
+rapidocr-onnxruntime ships (same ONNX files, copied into the Space by `make_static_space.py`)
+with the RapidOCR pre- and post-processing ported to JavaScript (DB boxes, CTC decoding; no
+text-angle classifier, as in the Python reader), and `demo/web/scale.js` ports
+`scale_ocr.read_scale` (`tests/test_web_scale.py` checks it against Python). On the dial crops of
+the 8 demo examples (Node, onnxruntime-web vs. rapidocr with `use_cls=False`) the recognised
+texts are nearly the same (one extra or missing box on 4 crops, "C10" for "C1.0" once) and the
+range is the same on all 8: 0–1.6 MPa, 0–10 bar (tilted render), 0–16, −1–6 (twice) and 0–6 bar;
+no range on the blurred and the dark renders, as in Python. In headless Chromium OCR adds about
+1.1–1.6 s per photo; the models are about 16 MB and load on the first unregistered photo.
+
 ## Versions 5 and 5b: small gauges and dual scales (2026-11-18 / 21) — 5b is the default model
 
 Both keep the Version 3 setup (yolo11s-pose, 7 keypoints, rotation ±30°, 50 epochs) and change
